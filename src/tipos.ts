@@ -68,7 +68,7 @@ export interface Cuenta {
   metodoPago: MetodoPago | null;
 }
 
-export type MetodoPago = "efectivo" | "tarjeta" | "transferencia";
+export type MetodoPago = "efectivo" | "tarjeta";
 
 /** Qué descuento terminó aplicándose. Nunca se acumulan. */
 export type TipoDescuento = "ninguno" | "estudiante" | "happy_hour";
@@ -110,6 +110,10 @@ export interface EstadoDia {
   /** Fecha operativa en formato YYYY-MM-DD. */
   fecha: string;
   cuentas: Cuenta[];
+  /** Último consecutivo repartido. No baja al borrar una cuenta. */
+  ultimoNumero: number;
+  /** Avisos de cierre ya dados, como "2026-09-22:-30". No cuelgan de ninguna persona. */
+  avisosCierre: string[];
   paquetes: Paquete[];
   ajustes: Ajustes;
   /** Versión del formato, para migraciones futuras. */

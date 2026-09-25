@@ -1,130 +1,161 @@
 import { useState, type CSSProperties } from "react";
+import { CircleCheck, Zap } from "lucide-react";
 import type { Ajustes, Modalidad, Paquete } from "../tipos";
-import { formatoDinero, NOMBRE_MODALIDAD_CORTO, preciosDe } from "../lib/cobro";
+import { buscarPaquete, formatoPrecio, NOMBRE_MODALIDAD_CORTO, preciosDe } from "../lib/cobro";
+import { Avatar } from "./Avatar";
+import { Modal } from "./Modal";
+import { moverConFlechas, Segmentado } from "./Segmentado";
 
 const MODALIDADES: Modalidad[] = ["tiempo", "dia", "all_access"];
+
+export interface Eleccion {
+  paqueteId: string;
+  modalidad: Modalidad;
+}
 
 interface Props {
   paquetes: Paquete[];
   ajustes: Ajustes;
   ahora: number;
+  /** Lo que se eligió la última vez: casi siempre se repite. */
+  inicial: Eleccion | null;
   onAbrir: (paqueteId: string, personas: string[], modalidad: Modalidad) => void;
+  onCerrar: () => void;
 }
 
-export function NuevaCuenta({ paquetes, ajustes, ahora, onAbrir }: Props) {
-  const [personas, setPersonas] = useState("");
-  const [paqueteId, setPaqueteId] = useState(paquetes[0]?.id ?? "");
-  const [modalidad, setModalidad] = useState<Modalidad>("tiempo");
+export function NuevaCuenta({ paquetes, ajustes, ahora, inicial, onAbrir, onCerrar }: Props) {
+  const [texto, setTexto] = useState("");
+  const [paqueteId, setPaqueteId] = useState(inicial?.paqueteId ?? paquetes[0]?.id ?? "");
+  const [modalidad, setModalidad] = useState<Modalidad>(inicial?.modalidad ?? "tiempo");
 
-  function enviar(e: React.FormEvent) {
-    e.preventDefault();
-    const lista = personas
-      .split(",")
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (lista.length === 0) return;
-    onAbrir(paqueteId || paquetes[0].id, lista, modalidad);
-    setPersonas("");
+  const nombres = texto
+    .split(",")
+    .map((n) => n.trim())
+    .filter(Boolean);
+  const elegido = buscarPaquete(paquetes, paqueteId);
+
+  function enviar() {
+    if (nombres.length === 0) return;
+    onAbrir(elegido.id, nombres, modalidad);
   }
 
   return (
-    <section className="nueva-cuenta">
-      <form onSubmit={enviar}>
-        <div>
-          <label className="etiqueta" htmlFor="nc-personas">
-            Quién entra — separa los nombres con comas
+    <Modal
+      titulo="Nueva cuenta"
+      onCerrar={onCerrar}
+      pie={
+        <>
+          <button type="button" className="btn fantasma" onClick={onCerrar}>
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="form-nueva-cuenta"
+            className="btn primario"
+            disabled={nombres.length === 0}
+          >
+            Abrir cuenta
+          </button>
+        </>
+      }
+    >
+      <form
+        id="form-nueva-cuenta"
+        className="formulario"
+        onSubmit={(e) => {
+          e.preventDefault();
+          enviar();
+        }}
+      >
+        <div className="grupo">
+          <label className="grupo-etiqueta" htmlFor="nc-personas">
+            ¿Quién entra?
           </label>
           <input
             id="nc-personas"
-            className="campo"
+            className="campo grande"
             placeholder="Ana, Luis, Sofi"
-            value={personas}
-            onChange={(e) => setPersonas(e.target.value)}
-            autoFocus
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            // El botón de abrir vive en el pie del modal, fuera del <form>: el
+            // Enter se atiende aquí para no depender del envío implícito.
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                enviar();
+              }
+            }}
+            autoComplete="off"
+            data-autofocus
           />
+          <div className="chips-nombres" aria-live="polite">
+            {nombres.length === 0 ? (
+              <span className="pista">Si son varios, sepáralos con comas.</span>
+            ) : (
+              nombres.map((nombre, i) => (
+                <span key={`${i}-${nombre}`} className="chip-nombre">
+                  <Avatar nombre={nombre} tono={elegido.color} chico />
+                  {nombre}
+                </span>
+              ))
+            )}
+          </div>
         </div>
 
-        <button className="btn primario" type="submit" disabled={!personas.trim()}>
-          Abrir cuenta
-        </button>
-      </form>
-
-      <div className="fila-elecciones">
-        <div style={{ flex: 1 }}>
-          <label className="etiqueta">Paquete</label>
-          <div className="paquetes-elegir">
+        <div className="grupo">
+          <span className="grupo-etiqueta" id="nc-paquete">
+            Paquete
+          </span>
+          <div
+            className="opciones-paquete"
+            role="radiogroup"
+            aria-labelledby="nc-paquete"
+            onKeyDown={moverConFlechas}
+          >
             {paquetes.map((p) => {
               const precios = preciosDe(p, ajustes, ahora);
-              const activo = p.id === paqueteId;
+              const activo = p.id === elegido.id;
               return (
                 <button
                   key={p.id}
                   type="button"
-                  className="paquete-op"
+                  role="radio"
+                  aria-checked={activo}
+                  tabIndex={activo ? 0 : -1}
+                  className="opcion-paquete"
                   style={{ "--tono": p.color } as CSSProperties}
-                  aria-pressed={activo}
                   onClick={() => setPaqueteId(p.id)}
                 >
-                  <b>{p.nombre}</b>
-                  <small>
-                    <span className={modalidad === "tiempo" ? "resaltado" : ""}>
-                      ${precios.tiempo}/h
+                  <span className="opcion-paquete-nombre">
+                    <span className="punto" aria-hidden="true" />
+                    {p.nombre}
+                  </span>
+                  <span className="opcion-paquete-precio">
+                    {formatoPrecio(precios[modalidad], ajustes.moneda)}
+                    {modalidad === "tiempo" && <small>/h</small>}
+                  </span>
+                  {modalidad === "all_access" && precios.hayHappyHour && (
+                    <span className="etiqueta happy">
+                      <Zap size={11} aria-hidden="true" /> Happy hour
                     </span>
-                    {" · "}
-                    <span className={modalidad === "dia" ? "resaltado" : ""}>
-                      día ${precios.dia}
-                    </span>
-                    {" · "}
-                    <span className={modalidad === "all_access" ? "resaltado" : ""}>
-                      AA ${precios.all_access}
-                      {precios.hayHappyHour ? " ⚡" : ""}
-                    </span>
-                  </small>
+                  )}
+                  {activo && <CircleCheck className="opcion-check" size={18} aria-hidden="true" />}
                 </button>
               );
             })}
           </div>
         </div>
 
-        <div>
-          <label className="etiqueta">Cómo paga</label>
-          <div className="modalidades-elegir">
-            {MODALIDADES.map((m) => (
-              <button
-                key={m}
-                type="button"
-                className="mini"
-                aria-pressed={m === modalidad}
-                onClick={() => setModalidad(m)}
-              >
-                {NOMBRE_MODALIDAD_CORTO[m]}
-              </button>
-            ))}
-          </div>
-          <div className="pista">
-            {precioElegido(paquetes, paqueteId, ajustes, ahora, modalidad)}
-          </div>
+        <div className="grupo">
+          <span className="grupo-etiqueta">Cómo paga</span>
+          <Segmentado
+            etiqueta="Cómo paga"
+            opciones={MODALIDADES.map((m) => ({ valor: m, etiqueta: NOMBRE_MODALIDAD_CORTO[m] }))}
+            valor={modalidad}
+            onCambio={setModalidad}
+          />
         </div>
-      </div>
-    </section>
+      </form>
+    </Modal>
   );
-}
-
-/** Lo que va a pagar cada persona con lo que hay seleccionado ahora mismo. */
-function precioElegido(
-  paquetes: Paquete[],
-  paqueteId: string,
-  ajustes: Ajustes,
-  ahora: number,
-  modalidad: Modalidad,
-): string {
-  const paquete = paquetes.find((p) => p.id === paqueteId) ?? paquetes[0];
-  if (!paquete) return "";
-  const precios = preciosDe(paquete, ajustes, ahora);
-  const moneda = ajustes.moneda;
-  if (modalidad === "tiempo") return `${formatoDinero(precios.tiempo, moneda)} por hora empezada`;
-  if (modalidad === "dia") return `${formatoDinero(precios.dia, moneda)} por persona`;
-  return precios.hayHappyHour
-    ? `${formatoDinero(precios.all_access, moneda)} — happy hour`
-    : `${formatoDinero(precios.all_access, moneda)} por persona`;
 }

@@ -1,117 +1,199 @@
-import { useState, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties } from "react";
+import {
+  Check,
+  ChevronDown,
+  GraduationCap,
+  PencilLine,
+  StickyNote,
+  UserPlus,
+  Zap,
+} from "lucide-react";
 import type { Cuenta, EstadoDia } from "../tipos";
 import type { Accion } from "../estado/acciones";
-import { cobrarCuenta, formatoDinero, preciosDe } from "../lib/cobro";
-import { formatoDuracion, formatoHora } from "../lib/tiempo";
+import { cobrarCuenta, formatoPrecio, NOMBRE_MODALIDAD_CORTO } from "../lib/cobro";
+import { formatoHora } from "../lib/tiempo";
+import { Dinero } from "./Dinero";
 import { FilaPersona } from "./FilaPersona";
+import { Menu } from "./Menu";
 
 interface Props {
   cuenta: Cuenta;
   estado: EstadoDia;
   ahora: number;
+  /** Se ilumina un momento cuando se llega a ella desde otro lado. */
+  destacada: boolean;
   despachar: (a: Accion) => void;
   onCobrar: () => void;
 }
 
-export function TarjetaCuenta({ cuenta, estado, ahora, despachar, onCobrar }: Props) {
+export function TarjetaCuenta({ cuenta, estado, ahora, destacada, despachar, onCobrar }: Props) {
+  const [agregando, setAgregando] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState("");
-  const [cambiandoPaquete, setCambiandoPaquete] = useState(false);
   const [editandoNotas, setEditandoNotas] = useState(false);
+  const campoNombre = useRef<HTMLInputElement>(null);
 
   const cobro = cobrarCuenta(cuenta, estado.paquetes, estado.ajustes, ahora);
-  const cerrada = cuenta.cerradaEn !== null;
   const moneda = estado.ajustes.moneda;
-  const estilo = { "--tono": cobro.paquete.color } as CSSProperties;
-  const precios = preciosDe(cobro.paquete, estado.ajustes, ahora);
+  // Si todos pagan igual o tienen el mismo descuento, se dice una vez en la
+  // cabecera y no en cada fila.
+  const modalidades = new Set(cuenta.personas.map((p) => p.modalidad));
+  const modalidadComun = modalidades.size === 1 ? cuenta.personas[0].modalidad : null;
+  const descuentos = new Set(cobro.personas.map((p) => p.descuento));
+  const descuentoComun =
+    descuentos.size === 1 && cobro.personas[0].descuento !== "ninguno"
+      ? cobro.personas[0].descuento
+      : null;
 
   function agregarPersona(e: React.FormEvent) {
     e.preventDefault();
-    const nombre = nuevoNombre.trim();
-    if (!nombre) return;
     // Se pueden meter varias de un jalón: "Ana, Luis, Sofi"
-    for (const parte of nombre.split(",")) {
-      const limpio = parte.trim();
-      if (limpio) despachar({ tipo: "agregarPersona", cuentaId: cuenta.id, nombre: limpio });
+    for (const parte of nuevoNombre.split(",")) {
+      const nombre = parte.trim();
+      if (nombre) despachar({ tipo: "agregarPersona", cuentaId: cuenta.id, nombre });
     }
     setNuevoNombre("");
+    setAgregando(false);
+  }
+
+  function cancelarAgregar() {
+    setNuevoNombre("");
+    setAgregando(false);
   }
 
   return (
-    <article className={`cuenta${cerrada ? " cerrada" : ""}`} style={estilo}>
+    <article
+      id={`cuenta-${cuenta.id}`}
+      className={`cuenta${destacada ? " destello" : ""}`}
+      style={{ "--tono": cobro.paquete.color } as CSSProperties}
+      aria-label={cuenta.nombre}
+    >
       <header className="cuenta-cabeza">
-        <input
-          className="cuenta-nombre"
-          defaultValue={cuenta.nombre}
-          key={cuenta.nombre}
-          disabled={cerrada}
-          onBlur={(e) =>
-            despachar({
-              tipo: "editarCuenta",
-              cuentaId: cuenta.id,
-              cambios: { nombre: e.target.value.trim() || `Cuenta ${cuenta.numero}` },
-            })
-          }
-          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-          aria-label="Nombre de la cuenta"
-        />
-        <div className="cuenta-total">
-          <b>{formatoDinero(cuenta.totalCobrado ?? cobro.total, moneda)}</b>
-          <small>
-            {cobro.ahorro > 0
-              ? `−${formatoDinero(cobro.ahorro, moneda)} en descuentos`
-              : `${formatoDuracion(cobro.minutosTotales)} en total`}
-          </small>
+        <div className="cuenta-titulo">
+          <input
+            ref={campoNombre}
+            className="cuenta-nombre"
+            defaultValue={cuenta.nombre}
+            key={cuenta.nombre}
+            onBlur={(e) => {
+              // Si el nombre no cambia, `key` no remonta el campo: se repinta a mano.
+              e.target.value = e.target.value.trim() || `Cuenta ${cuenta.numero}`;
+              despachar({
+                tipo: "editarCuenta",
+                cuentaId: cuenta.id,
+                cambios: { nombre: e.target.value },
+              });
+            }}
+            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+            aria-label="Nombre de la cuenta"
+          />
+          <div className="cuenta-etiquetas">
+            <Menu
+              etiqueta={`Paquete ${cobro.paquete.nombre}. Cambiar paquete`}
+              titulo="Cambiar paquete"
+              claseDisparador="paquete-pill"
+              alinear="izquierda"
+              disparador={
+                <>
+                  <span className="punto" aria-hidden="true" />
+                  {cobro.paquete.nombre}
+                  <ChevronDown size={13} aria-hidden="true" />
+                </>
+              }
+            >
+              {(cerrar) => (
+                <>
+                  <p className="menu-titulo">Paquete</p>
+                  {estado.paquetes.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={p.id === cobro.paquete.id}
+                      className="menu-item"
+                      style={{ "--tono": p.color } as CSSProperties}
+                      onClick={() => {
+                        despachar({
+                          tipo: "editarCuenta",
+                          cuentaId: cuenta.id,
+                          cambios: { paqueteId: p.id },
+                        });
+                        cerrar();
+                      }}
+                    >
+                      <span className="menu-marca" aria-hidden="true">
+                        {p.id === cobro.paquete.id && <Check size={15} />}
+                      </span>
+                      <span className="punto" aria-hidden="true" />
+                      {p.nombre}
+                      <span className="menu-item-extra">{formatoPrecio(p.precioHora, moneda)}/h</span>
+                    </button>
+                  ))}
+                </>
+              )}
+            </Menu>
+            {descuentoComun === "happy_hour" && (
+              <span className="etiqueta happy">
+                <Zap size={11} aria-hidden="true" /> Happy hour
+              </span>
+            )}
+            {descuentoComun === "estudiante" && (
+              <span className="etiqueta estudiante">
+                <GraduationCap size={12} aria-hidden="true" /> Estudiantes
+              </span>
+            )}
+            <span className="etiqueta-texto">
+              {modalidadComun && modalidadComun !== "tiempo" && (
+                <>{NOMBRE_MODALIDAD_CORTO[modalidadComun]} · </>
+              )}
+              Abrió {formatoHora(cuenta.abiertaEn)}
+            </span>
+          </div>
         </div>
+
+        <Dinero className="cuenta-total" valor={cobro.total} moneda={moneda} />
+
+        <Menu etiqueta={`Opciones de ${cuenta.nombre}`}>
+          {(cerrar) => (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className="menu-item"
+                onClick={() => {
+                  cerrar();
+                  campoNombre.current?.focus();
+                  campoNombre.current?.select();
+                }}
+              >
+                <PencilLine size={16} aria-hidden="true" /> Cambiar nombre
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="menu-item"
+                onClick={() => {
+                  cerrar();
+                  setEditandoNotas(true);
+                }}
+              >
+                <StickyNote size={16} aria-hidden="true" />
+                {cuenta.notas ? "Editar nota" : "Agregar nota"}
+              </button>
+            </>
+          )}
+        </Menu>
       </header>
 
-      <div className="cuenta-chips">
-        {cambiandoPaquete && !cerrada ? (
-          estado.paquetes.map((p) => (
-            <button
-              key={p.id}
-              className="chip paquete"
-              style={{ "--tono": p.color } as CSSProperties}
-              onClick={() => {
-                despachar({
-                  tipo: "editarCuenta",
-                  cuentaId: cuenta.id,
-                  cambios: { paqueteId: p.id },
-                });
-                setCambiandoPaquete(false);
-              }}
-            >
-              {p.nombre}
-            </button>
-          ))
-        ) : (
-          <button
-            className="chip paquete"
-            onClick={() => !cerrada && setCambiandoPaquete(true)}
-            title="Cambiar de paquete"
-          >
-            {cobro.paquete.nombre}
-            {precios.hayHappyHour ? " ⚡" : ""}
-          </button>
-        )}
-
-        {cobro.personasActivas > 0 && (
-          <span className="chip adentro">● {cobro.personasActivas} adentro</span>
-        )}
-        <span className="chip">Abrió {formatoHora(cuenta.abiertaEn)}</span>
-        {cerrada && <span className="chip">Cobrada · {cuenta.metodoPago}</span>}
-      </div>
-
-      <div className="personas">
-        {cuenta.personas.length === 0 && (
-          <div className="persona-vacia">Todavía no hay nadie en esta cuenta.</div>
-        )}
+      <ul className="personas">
+        {cuenta.personas.length === 0 && <li className="persona-vacia">Sin nadie todavía</li>}
         {cuenta.personas.map((persona) => (
           <FilaPersona
             key={persona.id}
             persona={persona}
             cobro={cobro.personas.find((p) => p.personaId === persona.id)!}
-            moneda={moneda}
-            bloqueada={cerrada}
+            tono={cobro.paquete.color}
+            modalidadEnCabecera={modalidadComun !== null}
+            descuentoEnCabecera={descuentoComun !== null}
             onSalida={() =>
               despachar({ tipo: "marcarSalida", cuentaId: cuenta.id, personaId: persona.id })
             }
@@ -149,76 +231,62 @@ export function TarjetaCuenta({ cuenta, estado, ahora, despachar, onCobrar }: Pr
             }}
           />
         ))}
-      </div>
+      </ul>
 
-      {(cuenta.notas || editandoNotas) && (
-        <div className="cuenta-notas">
-          {editandoNotas && !cerrada ? (
-            <textarea
-              className="campo"
-              defaultValue={cuenta.notas}
-              autoFocus
-              placeholder="Mesa, consumo extra, pendientes…"
-              onBlur={(e) => {
-                despachar({
-                  tipo: "editarCuenta",
-                  cuentaId: cuenta.id,
-                  cambios: { notas: e.target.value },
-                });
-                setEditandoNotas(false);
-              }}
-            />
-          ) : (
-            <span onClick={() => !cerrada && setEditandoNotas(true)}>📝 {cuenta.notas}</span>
-          )}
-        </div>
+      {editandoNotas ? (
+        <textarea
+          className="campo nota-campo"
+          defaultValue={cuenta.notas}
+          autoFocus
+          placeholder="Mesa, consumo extra, pendientes…"
+          aria-label={`Nota de ${cuenta.nombre}`}
+          onBlur={(e) => {
+            despachar({
+              tipo: "editarCuenta",
+              cuentaId: cuenta.id,
+              cambios: { notas: e.target.value.trim() },
+            });
+            setEditandoNotas(false);
+          }}
+          onKeyDown={(e) => e.key === "Escape" && e.currentTarget.blur()}
+        />
+      ) : (
+        cuenta.notas && (
+          <button
+            type="button"
+            className="cuenta-nota"
+            onClick={() => setEditandoNotas(true)}
+            title="Editar nota"
+          >
+            <StickyNote size={14} aria-hidden="true" />
+            <span>{cuenta.notas}</span>
+          </button>
+        )
       )}
 
       <footer className="cuenta-pie">
-        {cerrada ? (
-          <>
-            <span style={{ flex: 1, fontSize: 12, color: "var(--texto-3)" }}>
-              Cerrada {formatoHora(cuenta.cerradaEn!)}
-            </span>
-            <button
-              className="btn chico fantasma"
-              onClick={() => despachar({ tipo: "reabrirCuenta", cuentaId: cuenta.id })}
-            >
-              Reabrir
+        {agregando ? (
+          <form className="agregar-persona" onSubmit={agregarPersona}>
+            <input
+              className="campo"
+              autoFocus
+              placeholder="Nombre, o varios con comas"
+              value={nuevoNombre}
+              onChange={(e) => setNuevoNombre(e.target.value)}
+              onBlur={() => !nuevoNombre.trim() && cancelarAgregar()}
+              onKeyDown={(e) => e.key === "Escape" && cancelarAgregar()}
+              aria-label={`Quién entra a ${cuenta.nombre}`}
+            />
+            <button className="btn chico primario" type="submit" disabled={!nuevoNombre.trim()}>
+              Agregar
             </button>
-            <button
-              className="btn chico fantasma peligro"
-              onClick={() =>
-                confirm(`¿Borrar la ${cuenta.nombre} del reporte?`) &&
-                despachar({ tipo: "eliminarCuenta", cuentaId: cuenta.id })
-              }
-            >
-              Borrar
-            </button>
-          </>
+          </form>
         ) : (
           <>
-            <form className="agregar-persona" onSubmit={agregarPersona}>
-              <input
-                className="campo"
-                placeholder="+ Agregar persona…"
-                value={nuevoNombre}
-                onChange={(e) => setNuevoNombre(e.target.value)}
-              />
-              <button className="btn chico" type="submit" disabled={!nuevoNombre.trim()}>
-                Entra
-              </button>
-            </form>
-            {!cuenta.notas && !editandoNotas && (
-              <button
-                className="btn chico fantasma"
-                onClick={() => setEditandoNotas(true)}
-                title="Agregar una nota"
-              >
-                📝
-              </button>
-            )}
-            <button className="btn chico verde" onClick={onCobrar}>
+            <button type="button" className="btn chico fantasma" onClick={() => setAgregando(true)}>
+              <UserPlus size={16} aria-hidden="true" /> Persona
+            </button>
+            <button type="button" className="btn primario" onClick={onCobrar}>
               Cobrar
             </button>
           </>

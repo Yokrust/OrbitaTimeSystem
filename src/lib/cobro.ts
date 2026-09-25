@@ -148,8 +148,20 @@ export const NOMBRE_MODALIDAD: Record<Persona["modalidad"], string> = {
   all_access: "All access",
 };
 
+/** "$59" si el precio es cerrado, "$59.50" si trae centavos. Para precios de lista. */
+export function formatoPrecio(n: number, moneda = "MXN"): string {
+  const cerrado = Number.isInteger(n);
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: moneda,
+    minimumFractionDigits: cerrado ? 0 : 2,
+    maximumFractionDigits: cerrado ? 0 : 2,
+  }).format(n);
+}
+
+/** Para la interfaz. El reporte usa NOMBRE_MODALIDAD. */
 export const NOMBRE_MODALIDAD_CORTO: Record<Persona["modalidad"], string> = {
-  tiempo: "Tiempo",
+  tiempo: "Por hora",
   dia: "Día",
   all_access: "All access",
 };

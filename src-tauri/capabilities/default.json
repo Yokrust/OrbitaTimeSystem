@@ -5,12 +5,14 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-theme",
     "opener:default",
     "notification:default",
     "fs:default",
     "fs:allow-appdata-read-recursive",
     "fs:allow-appdata-write-recursive",
-    "fs:allow-document-read-recursive",
-    "fs:allow-document-write-recursive"
+    { "identifier": "fs:allow-mkdir", "allow": [{ "path": "$DOCUMENT/ORBTIME" }] },
+    { "identifier": "fs:allow-write-text-file", "allow": [{ "path": "$DOCUMENT/ORBTIME/*" }] }
   ]
 }

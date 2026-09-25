@@ -8,22 +8,14 @@
  * Se guarda en cada cambio: si la Mac se apaga a media tarde, al abrir de
  * nuevo están todas las cuentas con sus horas de entrada intactas.
  */
-import { isTauri } from "@tauri-apps/api/core";
 import type { Cuenta, EstadoDia } from "../tipos";
 import { estadoVacio, VERSION_ESTADO } from "./defaults";
+import { enTauri } from "./entorno";
 import { fechaOperativa } from "./tiempo";
 
 const CARPETA = "ORBTIME";
 const ARCHIVO = `${CARPETA}/dia-actual.json`;
 const CLAVE_LOCAL = "orbtime:dia-actual";
-
-const enTauri = () => {
-  try {
-    return isTauri();
-  } catch {
-    return false;
-  }
-};
 
 export async function cargarEstado(): Promise<EstadoDia> {
   const crudo = await leerCrudo();
@@ -90,12 +82,16 @@ function migrar(datos: Partial<EstadoDia>): EstadoDia {
     })),
   }));
 
-  // Los paquetes de la v1 no tienen precio de día ni de all access: no se
-  // pueden rescatar, así que se vuelve a los del negocio.
+  // Un paquete sin todos sus precios (los de la v1, o uno tocado a mano) no se
+  // puede rescatar: un NaN llegaría al cobro. Se vuelve a los del negocio.
   const paquetesValidos =
     (datos.version ?? 0) >= 2 &&
     datos.paquetes?.length &&
-    datos.paquetes.every((p) => typeof p.precioDia === "number");
+    datos.paquetes.every(
+      (p) =>
+        [p.precioHora, p.precioDia, p.precioAllAccess].every(Number.isFinite) &&
+        (p.precioHappyHour === null || Number.isFinite(p.precioHappyHour)),
+    );
 
   return {
     ...base,
@@ -108,7 +104,7 @@ function migrar(datos: Partial<EstadoDia>): EstadoDia {
       ...(datos.ajustes ?? {}),
       // Estos llegaron en la v2; si vienen vacíos se usan los del negocio.
       horarios: datos.ajustes?.horarios?.length ? datos.ajustes.horarios : base.ajustes.horarios,
-      happyHour: datos.ajustes?.happyHour ?? base.ajustes.happyHour,
+      happyHour: datos.ajustes?.happyHour?.length ? datos.ajustes.happyHour : base.ajustes.happyHour,
     },
     version: VERSION_ESTADO,
   };

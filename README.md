@@ -13,11 +13,14 @@ tiempo real vienen después (ver *Fase 2*).
 - **Cuentas de grupo.** Escribes los nombres y se abre "Cuenta 1", "Cuenta 2"…
   numeradas solas. La gente se va agregando conforme llega, y cada quien corre
   su propio reloj desde el momento en que entró. Al cobrar se suman todos.
-- **Tiempo real.** Cronómetro por persona y total de la cuenta, al segundo.
+- **Tiempo real.** Cronómetro por persona y total de la cuenta, al segundo. El
+  anillo del avatar enseña cuánto va de la hora que ya se cobra, y se pone
+  ámbar los últimos 10 minutos, antes de que empiece a correr otra.
 - **Tres paquetes y tres formas de pagar.** Cada persona paga por tiempo, con
   pase de día o con pase all access, y se puede cambiar en cualquier momento.
-- **Horario del negocio.** La barra dice si está abierto y a qué hora cierra, y
-  avisa a 30 y a 15 minutos del cierre si todavía queda gente adentro.
+- **Horario del negocio.** El resumen de arriba dice si está abierto y a qué
+  hora cierra, y avisa a 30 y a 15 minutos del cierre si todavía queda gente
+  adentro.
 - **Descuentos.** El 10% de estudiante se marca al cobrar, persona por persona
   o toda la mesa de un golpe. La happy hour se aplica sola.
 - **Alarmas.** Notificación de macOS cada cierto tiempo (cada hora por
@@ -31,6 +34,10 @@ tiempo real vienen después (ver *Fase 2*).
   reporte en disco.
 
 Nada de esto depende de internet: todo se guarda en disco en cada cambio.
+
+La interfaz sigue el modo claro u oscuro de macOS; abajo en la barra lateral se
+puede fijar en claro u oscuro, y la elección se recuerda. ⌘N abre una cuenta y
+⌘, los ajustes.
 
 ---
 
@@ -177,7 +184,8 @@ sensato para arrancar es que solo la Mac escriba y el iPhone sea de consulta.
 - Firmar y notarizar el `.app` (si no, macOS pide permiso al abrirlo).
 - Consumos aparte del tiempo (bebidas, comida) sumados a la cuenta.
 - Pausar el reloj de una persona sin cerrarle la cuenta.
-- Avisar justo antes de que alguien cruce a la siguiente hora, para poder
-  ofrecerle el pase de día antes de que le salga más caro.
+- Mandar una notificación justo antes de que alguien cruce a la siguiente hora,
+  para poder ofrecerle el pase de día antes de que le salga más caro. Hoy solo
+  se marca en pantalla (el anillo ámbar).
 - Historial de días anteriores dentro de la app (hoy solo quedan los archivos
   exportados).

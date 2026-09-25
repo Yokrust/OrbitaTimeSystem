@@ -5,11 +5,11 @@
  * va contando. Si la Mac se durmió tres horas, al despertar se disparan (una
  * sola vez) los avisos que se hubieran perdido, con el texto correcto.
  */
-import { isTauri } from "@tauri-apps/api/core";
 import type { Ajustes, Cuenta, Paquete } from "../tipos";
 import { buscarPaquete } from "./cobro";
+import { enTauri } from "./entorno";
 import { estadoNegocio } from "./horario";
-import { formatoDuracion, minutosEntre } from "./tiempo";
+import { fechaOperativa, formatoDuracion, minutosEntre } from "./tiempo";
 
 /** Códigos reservados. Los de cierre no cuelgan de ninguna persona. */
 export const AVISO_CIERRE_30 = -30;
@@ -32,6 +32,11 @@ export interface Aviso {
   cuerpo: string;
 }
 
+/** Los avisos de cierre se recuerdan por día: mañana vuelven a sonar. */
+export function claveCierre(codigo: number, ahora: number = Date.now()): string {
+  return `${fechaOperativa(new Date(ahora))}:${codigo}`;
+}
+
 /**
  * Revisa todas las cuentas abiertas y devuelve los avisos pendientes.
  * Función pura: no notifica ni muta nada, solo dice qué habría que avisar.
@@ -41,6 +46,7 @@ export function avisosPendientes(
   paquetes: Paquete[],
   ajustes: Ajustes,
   ahora: number = Date.now(),
+  cierresVistos: string[] = [],
 ): Aviso[] {
   const avisos: Aviso[] = [];
   const intervalo = Math.max(1, ajustes.intervaloAlarmaMin);
@@ -85,7 +91,7 @@ export function avisosPendientes(
     if (negocio.paraCerrar !== null) {
       // El más urgente que ya se alcanzó (15 antes que 30).
       const tocado = AVISOS_CIERRE.filter((a) => negocio.paraCerrar! <= a.minutos).pop();
-      if (tocado) {
+      if (tocado && !cierresVistos.includes(claveCierre(tocado.codigo, ahora))) {
         avisos.push({
           cuentaId: "",
           personaId: NEGOCIO,
@@ -137,11 +143,3 @@ export async function notificar(titulo: string, cuerpo: string): Promise<void> {
   const { sendNotification } = await import("@tauri-apps/plugin-notification");
   sendNotification({ title: titulo, body: cuerpo });
 }
-
-const enTauri = () => {
-  try {
-    return isTauri();
-  } catch {
-    return false;
-  }
-};

@@ -1,13 +1,13 @@
 import { useState } from "react";
-import type { Cuenta, EstadoDia, MetodoPago } from "../tipos";
+import { Banknote, CreditCard, GraduationCap, Info, Zap } from "lucide-react";
+import type { CobroPersona, Cuenta, EstadoDia, MetodoPago } from "../tipos";
 import type { Accion } from "../estado/acciones";
-import {
-  cobrarCuenta,
-  formatoDinero,
-  NOMBRE_DESCUENTO,
-  NOMBRE_MODALIDAD_CORTO,
-} from "../lib/cobro";
-import { formatoDuracion, formatoHora } from "../lib/tiempo";
+import { cobrarCuenta, formatoDinero, NOMBRE_MODALIDAD_CORTO } from "../lib/cobro";
+import { formatoDuracion } from "../lib/tiempo";
+import { Avatar } from "./Avatar";
+import { Dinero } from "./Dinero";
+import { Modal } from "./Modal";
+import { Segmentado, type OpcionSegmento } from "./Segmentado";
 
 interface Props {
   cuenta: Cuenta;
@@ -18,16 +18,12 @@ interface Props {
   onConfirmar: (metodo: MetodoPago, total: number) => void;
 }
 
-const METODOS: MetodoPago[] = ["efectivo", "tarjeta", "transferencia"];
+const METODOS: OpcionSegmento<MetodoPago>[] = [
+  { valor: "efectivo", etiqueta: "Efectivo", icono: <Banknote size={17} aria-hidden="true" /> },
+  { valor: "tarjeta", etiqueta: "Tarjeta", icono: <CreditCard size={17} aria-hidden="true" /> },
+];
 
-export function ModalCobro({
-  cuenta,
-  estado,
-  ahora,
-  despachar,
-  onCerrar,
-  onConfirmar,
-}: Props) {
+export function ModalCobro({ cuenta, estado, ahora, despachar, onCerrar, onConfirmar }: Props) {
   const [metodo, setMetodo] = useState<MetodoPago>("efectivo");
   const cobro = cobrarCuenta(cuenta, estado.paquetes, estado.ajustes, ahora);
   const moneda = estado.ajustes.moneda;
@@ -35,163 +31,120 @@ export function ModalCobro({
   const pct = estado.ajustes.descuentoEstudiante;
   const todosEstudiantes =
     cuenta.personas.length > 0 && cuenta.personas.every((p) => p.estudiante);
+  const cuantas = cobro.personas.length;
 
   return (
-    <div className="velo" onClick={onCerrar}>
-      <div
-        className="modal ancho"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="modal-cabeza">
-          <h2>
-            Cobrar · {cuenta.nombre} <span className="tenue-inline">{cobro.paquete.nombre}</span>
-          </h2>
-          <button className="btn fantasma chico" onClick={onCerrar} aria-label="Cerrar">
-            ✕
-          </button>
-        </div>
-
-        <div className="modal-cuerpo">
-          {siguenAdentro > 0 && (
-            <div className="aviso-caja">
-              {siguenAdentro === 1
-                ? "Hay 1 persona con el reloj corriendo."
-                : `Hay ${siguenAdentro} personas con el reloj corriendo.`}{" "}
-              Al cobrar se les marca la salida en este momento.
-            </div>
-          )}
-
-          <div className="barra-descuento">
-            <span>Descuento de estudiante ({pct}%)</span>
-            <button
-              className="btn chico"
-              onClick={() =>
-                despachar({
-                  tipo: "marcarTodosEstudiantes",
-                  cuentaId: cuenta.id,
-                  valor: !todosEstudiantes,
-                })
-              }
-            >
-              {todosEstudiantes ? "Quitar a todos" : "Marcar a todos"}
-            </button>
-          </div>
-
-          <table className="ticket">
-            <thead>
-              <tr>
-                <th>Persona</th>
-                <th>Estudiante</th>
-                <th>Concepto</th>
-                <th>Importe</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cobro.personas.map((p) => {
-                const persona = cuenta.personas.find((x) => x.id === p.personaId)!;
-                const concepto =
-                  p.modalidad === "tiempo"
-                    ? `${p.horasFacturadas} h · ${formatoDuracion(p.minutosBrutos)}`
-                    : NOMBRE_MODALIDAD_CORTO[p.modalidad];
-                return (
-                  <tr key={p.personaId}>
-                    <td>
-                      {p.nombre}
-                      <div className="tenue">
-                        {formatoHora(persona.entrada)} →{" "}
-                        {persona.salida ? formatoHora(persona.salida) : "ahora"}
-                      </div>
-                    </td>
-                    <td className="col-estudiante">
-                      <input
-                        type="checkbox"
-                        checked={persona.estudiante}
-                        onChange={(e) =>
-                          despachar({
-                            tipo: "marcarEstudiante",
-                            cuentaId: cuenta.id,
-                            personaId: p.personaId,
-                            valor: e.target.checked,
-                          })
-                        }
-                        aria-label={`Estudiante: ${p.nombre}`}
-                      />
-                    </td>
-                    <td>
-                      {concepto}
-                      {p.descuento !== "ninguno" && (
-                        <div className={`tenue etiqueta-${p.descuento}`}>
-                          {NOMBRE_DESCUENTO[p.descuento]}
-                          {p.descuento === "happy_hour" && persona.estudiante
-                            ? " (no se acumula)"
-                            : ""}
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      {p.ahorro > 0 && (
-                        <div className="tenue">
-                          <s>{formatoDinero(p.importeBase, moneda)}</s>
-                        </div>
-                      )}
-                      {formatoDinero(p.importe, moneda)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              {cobro.ahorro > 0 && (
-                <tr className="sin-borde">
-                  <td colSpan={3} className="tenue">
-                    Subtotal
-                  </td>
-                  <td className="tenue">{formatoDinero(cobro.subtotal, moneda)}</td>
-                </tr>
-              )}
-              {cobro.ahorro > 0 && (
-                <tr className="sin-borde">
-                  <td colSpan={3} className="tenue">
-                    Descuentos
-                  </td>
-                  <td className="tenue">−{formatoDinero(cobro.ahorro, moneda)}</td>
-                </tr>
-              )}
-              <tr>
-                <td colSpan={3}>Total</td>
-                <td>{formatoDinero(cobro.total, moneda)}</td>
-              </tr>
-            </tfoot>
-          </table>
-
-          <div style={{ marginTop: 18 }}>
-            <label className="etiqueta">Método de pago</label>
-            <div className="metodos" style={{ marginTop: 0 }}>
-              {METODOS.map((m) => (
-                <button
-                  key={m}
-                  className="metodo"
-                  aria-pressed={m === metodo}
-                  onClick={() => setMetodo(m)}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="modal-pie">
-          <button className="btn fantasma" onClick={onCerrar}>
+    <Modal
+      titulo={`Cobrar ${cuenta.nombre}`}
+      onCerrar={onCerrar}
+      ancho
+      pie={
+        <>
+          <button type="button" className="btn fantasma" onClick={onCerrar}>
             Cancelar
           </button>
-          <button className="btn verde" onClick={() => onConfirmar(metodo, cobro.total)}>
+          <button
+            type="button"
+            className="btn primario grande"
+            onClick={() => onConfirmar(metodo, cobro.total)}
+          >
             Cobrar {formatoDinero(cobro.total, moneda)}
           </button>
-        </div>
+        </>
+      }
+    >
+      <div className="cifra-panel">
+        <Dinero className="cifra-grande" valor={cobro.total} moneda={moneda} />
+        <span className="cifra-detalle">
+          {cuantas === 1 ? "1 persona" : `${cuantas} personas`} · {cobro.paquete.nombre}
+          {cobro.ahorro > 0 && ` · ahorran ${formatoDinero(cobro.ahorro, moneda)}`}
+        </span>
       </div>
-    </div>
+
+      {siguenAdentro > 0 && (
+        <p className="nota">
+          <Info size={16} aria-hidden="true" />
+          Al cobrar se detiene el reloj de{" "}
+          {siguenAdentro === 1 ? "1 persona" : `${siguenAdentro} personas`}.
+        </p>
+      )}
+
+      <div className="lista-cabeza">
+        <span className="grupo-etiqueta">Personas</span>
+        <button
+          type="button"
+          className="btn chico fantasma"
+          aria-pressed={todosEstudiantes}
+          onClick={() =>
+            despachar({
+              tipo: "marcarTodosEstudiantes",
+              cuentaId: cuenta.id,
+              valor: !todosEstudiantes,
+            })
+          }
+        >
+          <GraduationCap size={16} aria-hidden="true" />
+          {todosEstudiantes ? "Quitar estudiante a todos" : "Todos son estudiantes"}
+        </button>
+      </div>
+
+      <ul className="cobro-personas">
+        {cobro.personas.map((p) => {
+          const persona = cuenta.personas.find((x) => x.id === p.personaId)!;
+          return (
+            <li key={p.personaId} className="cobro-persona">
+              <Avatar nombre={p.nombre} tono={cobro.paquete.color} chico />
+              <div className="cobro-persona-info">
+                <b>{p.nombre}</b>
+                <small>{concepto(p)}</small>
+              </div>
+              {p.descuento === "happy_hour" ? (
+                <span className="etiqueta happy" title="La happy hour no se suma a otros descuentos">
+                  <Zap size={11} aria-hidden="true" /> Happy hour
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="toggle-estudiante"
+                  aria-pressed={persona.estudiante}
+                  title={`Descuento de estudiante: ${pct}%`}
+                  onClick={() =>
+                    despachar({
+                      tipo: "marcarEstudiante",
+                      cuentaId: cuenta.id,
+                      personaId: p.personaId,
+                      valor: !persona.estudiante,
+                    })
+                  }
+                >
+                  <GraduationCap size={15} aria-hidden="true" /> Estudiante
+                </button>
+              )}
+              <span className="cobro-importe">
+                {p.ahorro > 0 && <s>{formatoDinero(p.importeBase, moneda)}</s>}
+                {formatoDinero(p.importe, moneda)}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="grupo">
+        <span className="grupo-etiqueta">Método de pago</span>
+        <Segmentado
+          etiqueta="Método de pago"
+          opciones={METODOS}
+          valor={metodo}
+          onCambio={setMetodo}
+          grande
+        />
+      </div>
+    </Modal>
   );
+}
+
+function concepto(p: CobroPersona): string {
+  if (p.modalidad !== "tiempo") return NOMBRE_MODALIDAD_CORTO[p.modalidad];
+  const horas = p.horasFacturadas === 1 ? "1 hora" : `${p.horasFacturadas} horas`;
+  return `${horas} · estuvo ${formatoDuracion(p.minutosBrutos)}`;
 }

@@ -9,7 +9,7 @@ import type {
 } from "../tipos";
 import { nuevoId } from "../lib/defaults";
 import { fechaOperativa } from "../lib/tiempo";
-import type { Aviso } from "../lib/alarmas";
+import { claveCierre, NEGOCIO, type Aviso } from "../lib/alarmas";
 
 export type Accion =
   | { tipo: "cargar"; estado: EstadoDia }
@@ -32,9 +32,9 @@ export type Accion =
   | { tipo: "guardarPaquetes"; paquetes: Paquete[] }
   | { tipo: "nuevoDia" };
 
-/** Consecutivo del día. Se deriva de las cuentas, no se guarda aparte. */
-export function siguienteNumero(cuentas: Cuenta[]): number {
-  return cuentas.reduce((max, c) => Math.max(max, c.numero), 0) + 1;
+/** Consecutivo del día. Nunca baja: borrar una cuenta no libera su número. */
+export function siguienteNumero(estado: EstadoDia): number {
+  return estado.cuentas.reduce((max, c) => Math.max(max, c.numero), estado.ultimoNumero) + 1;
 }
 
 export function reducir(estado: EstadoDia, accion: Accion): EstadoDia {
@@ -48,7 +48,7 @@ export function reducir(estado: EstadoDia, accion: Accion): EstadoDia {
         .map((n) => n.trim())
         .filter(Boolean)
         .map((n) => crearPersona(n, ahora, accion.modalidad));
-      const numero = siguienteNumero(estado.cuentas);
+      const numero = siguienteNumero(estado);
       const cuenta: Cuenta = {
         id: nuevoId("c"),
         numero,
@@ -61,7 +61,7 @@ export function reducir(estado: EstadoDia, accion: Accion): EstadoDia {
         totalCobrado: null,
         metodoPago: null,
       };
-      return { ...estado, cuentas: [cuenta, ...estado.cuentas] };
+      return { ...estado, ultimoNumero: numero, cuentas: [cuenta, ...estado.cuentas] };
     }
 
     case "agregarPersona":
@@ -156,12 +156,18 @@ export function reducir(estado: EstadoDia, accion: Accion): EstadoDia {
     case "marcarAvisos": {
       if (accion.avisos.length === 0) return estado;
       const porPersona = new Map<string, number[]>();
+      const cierres: string[] = [];
       for (const a of accion.avisos) {
+        if (a.personaId === NEGOCIO) {
+          cierres.push(claveCierre(a.codigo));
+          continue;
+        }
         const previos = porPersona.get(a.personaId) ?? [];
         porPersona.set(a.personaId, [...previos, a.codigo]);
       }
       return {
         ...estado,
+        avisosCierre: [...new Set([...estado.avisosCierre, ...cierres])],
         cuentas: estado.cuentas.map((c) => ({
           ...c,
           personas: c.personas.map((p) => {
@@ -180,7 +186,7 @@ export function reducir(estado: EstadoDia, accion: Accion): EstadoDia {
       return { ...estado, paquetes: accion.paquetes };
 
     case "nuevoDia":
-      return { ...estado, fecha: fechaOperativa(), cuentas: [] };
+      return { ...estado, fecha: fechaOperativa(), cuentas: [], ultimoNumero: 0, avisosCierre: [] };
   }
 }
 
