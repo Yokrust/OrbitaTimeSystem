@@ -1,6 +1,6 @@
 [package]
 name = "orbtime"
-version = "0.2.0"
+version = "0.2.1"
 description = "Caja por tiempo para anticafé"
 authors = ["Órbita"]
 edition = "2021"
