@@ -4,9 +4,13 @@
 //!   * quedarse en la barra de menús cuando cierran la ventana,
 //!   * un latido que despierta al frontend para revisar las alarmas aunque
 //!     macOS haya congelado los temporizadores del webview,
-//!   * el menú de la bandeja para exportar o salir sin abrir la ventana.
+//!   * el menú de la bandeja para exportar o salir sin abrir la ventana,
+//!   * aplazar cualquier salida hasta que la interfaz deje el reporte en disco.
 //!
 //! Toda la lógica de negocio (tiempos, cobros, reporte) está del lado de React.
+
+#[cfg(target_os = "macos")]
+mod salida_macos;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -41,6 +45,16 @@ fn set_ocultar_al_cerrar(prefs: tauri::State<'_, Preferencias>, valor: bool) {
 /// Salida de verdad. El frontend la llama después de exportar el reporte.
 #[tauri::command]
 fn salir_app(app: tauri::AppHandle) {
+    terminar(&app);
+}
+
+/// Si la salida la pidió macOS (Dock, cerrar sesión), está esperando respuesta
+/// y hay que dársela; si no, basta con cerrar el bucle de eventos.
+fn terminar(app: &tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    if salida_macos::responder(app) {
+        return;
+    }
     app.exit(0);
 }
 
@@ -64,13 +78,13 @@ fn pedir_salida(app: &tauri::AppHandle) -> bool {
     let handle = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(ESPERA_SALIDA_SEGUNDOS));
-        handle.exit(0);
+        terminar(&handle);
     });
     true
 }
 
-/// El "Quit" nativo de macOS termina el proceso sin pasar por ExitRequested
-/// (tao no implementa applicationShouldTerminate): se cambia por uno propio.
+/// El "Quit" del menú se cambia por uno propio que pide el reporte directamente,
+/// sin pasar por terminate:. El Dock y cerrar sesión sí pasan: ver salida_macos.
 #[cfg(target_os = "macos")]
 fn menu_de_la_app(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     use tauri::menu::MenuItemKind;
@@ -100,7 +114,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![set_ocultar_al_cerrar, salir_app])
         .setup(|app| {
             #[cfg(target_os = "macos")]
-            app.set_menu(menu_de_la_app(app.handle())?)?;
+            {
+                app.set_menu(menu_de_la_app(app.handle())?)?;
+                salida_macos::instalar(app.handle());
+            }
             construir_bandeja(app.handle())?;
 
             // Latido: no calcula nada, solo le da un empujón al frontend.
@@ -116,10 +133,14 @@ pub fn run() {
         })
         .on_window_event(|ventana, evento| {
             if let WindowEvent::CloseRequested { api, .. } = evento {
-                let prefs = ventana.app_handle().state::<Preferencias>();
-                if prefs.ocultar_al_cerrar.load(Ordering::Relaxed) {
-                    api.prevent_close();
+                // La ventana no se destruye nunca: sin ella no hay interfaz que
+                // guarde el reporte.
+                api.prevent_close();
+                let app = ventana.app_handle();
+                if app.state::<Preferencias>().ocultar_al_cerrar.load(Ordering::Relaxed) {
                     let _ = ventana.hide();
+                } else {
+                    pedir_salida(app);
                 }
             }
         })
@@ -130,9 +151,9 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen { .. } => mostrar_ventana(app),
 
-            // Se cerró la última ventana sin ocultarla. `code` viene vacío justo
-            // ahí; cuando el frontend llama a salir_app trae Some(0) y entonces
-            // sí se deja salir.
+            // No quedan ventanas (no debería pasar: cerrar solo oculta o pide la
+            // salida). `code` viene vacío solo en ese caso; el de salir_app trae
+            // Some(0) y ese sí se deja pasar.
             tauri::RunEvent::ExitRequested { api, code, .. } if code.is_none() => {
                 if pedir_salida(app) {
                     api.prevent_exit();
