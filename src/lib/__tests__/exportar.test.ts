@@ -123,6 +123,28 @@ describe("los totales del reporte concuerdan entre sí", () => {
     // El importe congelado de la cuenta cobrada se respeta.
     expect(csv).toContain("tarjeta,1,180.00");
   });
+
+  it("cuadra también con una transferencia guardada por la v0.1", () => {
+    const estado = estadoDePrueba();
+    estado.cuentas.push({
+      id: "c3",
+      numero: 3,
+      nombre: "Cuenta 3",
+      paqueteId: BLACK.id,
+      personas: [persona("p4", "Rosa", 0, 50)],
+      notas: "",
+      abiertaEn: iso(0),
+      cerradaEn: iso(50),
+      totalCobrado: 59,
+      metodoPago: "transferencia",
+    });
+    const csv = generarCSV(estado, BASE + 120 * 60_000);
+    const total = Number(csv.match(/Total del día,([\d.]+)/)![1]);
+    const porMetodo = [...csv.matchAll(/^(efectivo|tarjeta|transferencia|sin cobrar),\d+,([\d.]+)$/gm)];
+
+    expect(csv).toContain("transferencia,1,59.00");
+    expect(suma(porMetodo)).toBeCloseTo(total, 2);
+  });
 });
 
 /** Cuenta comas que no van dentro de comillas. */

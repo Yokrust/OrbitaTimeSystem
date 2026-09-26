@@ -65,10 +65,14 @@ export interface Cuenta {
   cerradaEn: string | null;
   /** Foto del cobro en el momento del cierre, para que no cambie después. */
   totalCobrado: number | null;
-  metodoPago: MetodoPago | null;
+  metodoPago: MetodoGuardado | null;
 }
 
+/** Cómo se cobra hoy. */
 export type MetodoPago = "efectivo" | "tarjeta";
+
+/** Lo que puede traer una cuenta ya cobrada: la v0.1 también aceptaba transferencia. */
+export type MetodoGuardado = MetodoPago | "transferencia";
 
 /** Qué descuento terminó aplicándose. Nunca se acumulan. */
 export type TipoDescuento = "ninguno" | "estudiante" | "happy_hour";

@@ -40,7 +40,8 @@ create table if not exists public.cuentas (
   abierta_en     timestamptz not null default now(),
   cerrada_en     timestamptz,
   total_cobrado  numeric(10,2),
-  metodo_pago    text        check (metodo_pago in ('efectivo','tarjeta')),
+  -- 'transferencia' solo llega de cuentas cobradas con la v0.1.
+  metodo_pago    text        check (metodo_pago in ('efectivo','tarjeta','transferencia')),
   actualizado_en timestamptz not null default now(),
 
   -- Una cuenta cobrada tiene que tener total y método; una abierta, ninguno.

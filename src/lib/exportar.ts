@@ -114,7 +114,8 @@ export function generarCSV(estado: EstadoDia, ahora: number = Date.now()): strin
   filas.push([]);
 
   filas.push(["Por método de pago", "Cuentas", "Importe"]);
-  const metodos = ["efectivo", "tarjeta", "sin cobrar"] as const;
+  // Transferencia solo aparece si viene de un día guardado por la v0.1.
+  const metodos = ["efectivo", "tarjeta", "transferencia", "sin cobrar"] as const;
   for (const metodo of metodos) {
     const cuentas = estado.cuentas.filter((c) =>
       metodo === "sin cobrar" ? !c.metodoPago : c.metodoPago === metodo,
