@@ -4,7 +4,6 @@
  *
  * Ambos se guardan en ~/Documents/ORBTIME/.
  */
-import { isTauri } from "@tauri-apps/api/core";
 import type { Cuenta, EstadoDia } from "../tipos";
 import {
   buscarPaquete,
@@ -13,6 +12,7 @@ import {
   NOMBRE_MODALIDAD,
   redondearPeso,
 } from "./cobro";
+import { enTauri } from "./entorno";
 import { formatoFechaHora, selloArchivo } from "./tiempo";
 
 const CARPETA = "ORBTIME";
@@ -114,7 +114,7 @@ export function generarCSV(estado: EstadoDia, ahora: number = Date.now()): strin
   filas.push([]);
 
   filas.push(["Por método de pago", "Cuentas", "Importe"]);
-  const metodos = ["efectivo", "tarjeta", "transferencia", "sin cobrar"] as const;
+  const metodos = ["efectivo", "tarjeta", "sin cobrar"] as const;
   for (const metodo of metodos) {
     const cuentas = estado.cuentas.filter((c) =>
       metodo === "sin cobrar" ? !c.metodoPago : c.metodoPago === metodo,
@@ -222,14 +222,6 @@ function descargarNavegador(nombre: string, contenido: string, tipo: string): vo
   a.click();
   URL.revokeObjectURL(url);
 }
-
-const enTauri = () => {
-  try {
-    return isTauri();
-  } catch {
-    return false;
-  }
-};
 
 /** Resumen corto para el ticket de una cuenta al momento de cobrar. */
 export function ticketTexto(cuenta: Cuenta, estado: EstadoDia, ahora = Date.now()): string {

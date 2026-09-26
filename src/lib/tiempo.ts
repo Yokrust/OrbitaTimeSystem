@@ -29,10 +29,10 @@ export function formatoCronometro(minutos: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-/** "10:23 a.m." */
+/** "9:23 a.m." */
 export function formatoHora(iso: string): string {
   return new Date(iso).toLocaleTimeString("es-MX", {
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
     hour12: true,
   });
@@ -55,6 +55,12 @@ export function fechaOperativa(d: Date = new Date()): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
+}
+
+/** "2026-09-21" -> "21 de septiembre" */
+export function fechaLarga(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("es-MX", { day: "numeric", month: "long" });
 }
 
 /** Sello para nombres de archivo: 2026-09-09_1843 */

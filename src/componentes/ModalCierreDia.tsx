@@ -1,6 +1,9 @@
+import { FolderOpen, TriangleAlert } from "lucide-react";
 import type { EstadoDia } from "../tipos";
 import { cobrarCuenta, formatoDinero, redondearPeso } from "../lib/cobro";
-import { formatoDuracion } from "../lib/tiempo";
+import { fechaLarga, formatoDuracion } from "../lib/tiempo";
+import { Dinero } from "./Dinero";
+import { Modal } from "./Modal";
 
 interface Props {
   estado: EstadoDia;
@@ -14,6 +17,7 @@ export function ModalCierreDia({ estado, ahora, trabajando, onCerrar, onExportar
   const cobros = estado.cuentas.map((c) =>
     cobrarCuenta(c, estado.paquetes, estado.ajustes, ahora),
   );
+  const moneda = estado.ajustes.moneda;
   const abiertas = estado.cuentas.filter((c) => !c.cerradaEn).length;
   const adentro = cobros.reduce((a, c) => a + c.personasActivas, 0);
   const total = redondearPeso(
@@ -24,76 +28,72 @@ export function ModalCierreDia({ estado, ahora, trabajando, onCerrar, onExportar
   const minutos = cobros.reduce((a, c) => a + c.minutosTotales, 0);
 
   return (
-    <div className="velo" onClick={trabajando ? undefined : onCerrar}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
-        <div className="modal-cabeza">
-          <h2>Cerrar el día · {estado.fecha}</h2>
-        </div>
-
-        <div className="modal-cuerpo">
-          {abiertas > 0 && (
-            <div className="aviso-caja">
-              Quedan {abiertas} cuenta{abiertas === 1 ? "" : "s"} sin cobrar
-              {adentro > 0 && ` y ${adentro} persona${adentro === 1 ? "" : "s"} con el reloj corriendo`}.
-              Se exportan tal cual, con el tiempo que llevan hasta ahorita.
-            </div>
-          )}
-
-          <table className="ticket">
-            <tbody>
-              <tr>
-                <td>Cuentas</td>
-                <td>{estado.cuentas.length}</td>
-              </tr>
-              <tr>
-                <td>Personas atendidas</td>
-                <td>{personas}</td>
-              </tr>
-              <tr>
-                <td>Tiempo vendido</td>
-                <td>{formatoDuracion(minutos)}</td>
-              </tr>
-              {ahorro > 0 && (
-                <tr>
-                  <td>Descuentos aplicados</td>
-                  <td>−{formatoDinero(ahorro, estado.ajustes.moneda)}</td>
-                </tr>
-              )}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td>Total del día</td>
-                <td>{formatoDinero(total, estado.ajustes.moneda)}</td>
-              </tr>
-            </tfoot>
-          </table>
-
-          <p style={{ fontSize: 12, color: "var(--texto-3)", marginBottom: 0 }}>
-            Se guarda un CSV y un JSON en <b>Documentos / ORBTIME</b>.
-          </p>
-        </div>
-
-        <div className="modal-pie">
-          <button className="btn fantasma" onClick={onCerrar} disabled={trabajando}>
+    <Modal
+      titulo={`Cerrar el día · ${fechaLarga(estado.fecha)}`}
+      onCerrar={onCerrar}
+      ocupado={trabajando}
+      pie={
+        <>
+          <button type="button" className="btn fantasma" onClick={onCerrar} disabled={trabajando}>
             Cancelar
           </button>
-          <button className="btn" onClick={() => onExportar(false)} disabled={trabajando}>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => onExportar(false)}
+            disabled={trabajando}
+          >
             Solo exportar
           </button>
           <button
+            type="button"
             className="btn primario"
             onClick={() => onExportar(true)}
             disabled={trabajando || abiertas > 0}
-            title={
-              abiertas > 0
-                ? "Primero cobra o cierra las cuentas que siguen abiertas"
-                : "Exporta y deja la caja vacía para mañana"
-            }
           >
-            {trabajando ? "Exportando…" : "Exportar y empezar día nuevo"}
+            {trabajando ? "Exportando…" : "Exportar y cerrar el día"}
           </button>
+        </>
+      }
+    >
+      <div className="cifra-panel">
+        <span className="grupo-etiqueta">Total del día</span>
+        <Dinero className="cifra-grande" valor={total} moneda={moneda} />
+        {ahorro > 0 && (
+          <span className="cifra-detalle">Con {formatoDinero(ahorro, moneda)} de descuentos</span>
+        )}
+      </div>
+
+      <div className="cierre-datos">
+        <div className="cierre-dato">
+          <b>{estado.cuentas.length}</b>
+          <span>{estado.cuentas.length === 1 ? "cuenta" : "cuentas"}</span>
+        </div>
+        <div className="cierre-dato">
+          <b>{personas}</b>
+          <span>{personas === 1 ? "persona" : "personas"}</span>
+        </div>
+        <div className="cierre-dato">
+          <b>{formatoDuracion(minutos)}</b>
+          <span>de tiempo</span>
         </div>
       </div>
-    </div>
+
+      {abiertas > 0 && (
+        <p className="nota ambar">
+          <TriangleAlert size={16} aria-hidden="true" />
+          <span>
+            {abiertas === 1 ? "Queda 1 cuenta sin cobrar" : `Quedan ${abiertas} cuentas sin cobrar`}
+            {adentro > 0 && ` con ${adentro === 1 ? "1 reloj" : `${adentro} relojes`} corriendo`}.
+            Cóbralas para cerrar el día; si solo exportas, salen con el tiempo que llevan.
+          </span>
+        </p>
+      )}
+
+      <p className="nota-archivo">
+        <FolderOpen size={16} aria-hidden="true" />
+        El reporte se guarda en Documentos › ORBTIME
+      </p>
+    </Modal>
   );
 }

@@ -70,6 +70,8 @@ export function estadoVacio(fecha = fechaOperativa()): EstadoDia {
   return {
     fecha,
     cuentas: [],
+    ultimoNumero: 0,
+    avisosCierre: [],
     paquetes: PAQUETES_INICIALES.map((p) => ({ ...p })),
     ajustes: {
       ...AJUSTES_INICIALES,

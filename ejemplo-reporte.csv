@@ -15,8 +15,7 @@ Gold,2,3,12.17,800.00
 
 Por método de pago,Cuentas,Importe
 efectivo,1,480.00
-tarjeta,1,510.00
-transferencia,1,318.60
+tarjeta,2,828.60
 sin cobrar,1,290.00
 
 Por modalidad,Personas,Importe calculado
@@ -33,6 +32,6 @@ Cuenta 1,Gold,Ana,All access,"07/09/2026, 08:45 a.m.","07/09/2026, 05:30 p.m.",5
 Cuenta 1,Gold,Luis,Por tiempo,"07/09/2026, 10:00 a.m.","07/09/2026, 12:20 p.m.",140.0,3,270.00,,270.00,salió,tarjeta,
 Cuenta 2,Blue,Regina,Día,"07/09/2026, 11:15 a.m.","07/09/2026, 02:00 p.m.",165.0,,240.00,,240.00,salió,efectivo,Junta de trabajo
 Cuenta 2,Blue,Diego,Día,"07/09/2026, 11:15 a.m.","07/09/2026, 02:00 p.m.",165.0,,240.00,,240.00,salió,efectivo,Junta de trabajo
-Cuenta 3,Black,Sofi,Por tiempo,"07/09/2026, 03:00 p.m.","07/09/2026, 06:10 p.m.",190.0,4,236.00,Estudiante,212.40,salió,transferencia,
-Cuenta 3,Black,Javier,Por tiempo,"07/09/2026, 04:30 p.m.","07/09/2026, 06:10 p.m.",100.0,2,118.00,Estudiante,106.20,salió,transferencia,
+Cuenta 3,Black,Sofi,Por tiempo,"07/09/2026, 03:00 p.m.","07/09/2026, 06:10 p.m.",190.0,4,236.00,Estudiante,212.40,salió,tarjeta,
+Cuenta 3,Black,Javier,Por tiempo,"07/09/2026, 04:30 p.m.","07/09/2026, 06:10 p.m.",100.0,2,118.00,Estudiante,106.20,salió,tarjeta,
 Cuenta 4,Gold,Yael,Día,"07/09/2026, 07:40 p.m.",,65.0,,290.00,,290.00,adentro,,

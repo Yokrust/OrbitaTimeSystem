@@ -4,9 +4,13 @@
 //!   * quedarse en la barra de menús cuando cierran la ventana,
 //!   * un latido que despierta al frontend para revisar las alarmas aunque
 //!     macOS haya congelado los temporizadores del webview,
-//!   * el menú de la bandeja para exportar o salir sin abrir la ventana.
+//!   * el menú de la bandeja para exportar o salir sin abrir la ventana,
+//!   * aplazar cualquier salida hasta que la interfaz deje el reporte en disco.
 //!
 //! Toda la lógica de negocio (tiempos, cobros, reporte) está del lado de React.
+
+#[cfg(target_os = "macos")]
+mod salida_macos;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -41,6 +45,16 @@ fn set_ocultar_al_cerrar(prefs: tauri::State<'_, Preferencias>, valor: bool) {
 /// Salida de verdad. El frontend la llama después de exportar el reporte.
 #[tauri::command]
 fn salir_app(app: tauri::AppHandle) {
+    terminar(&app);
+}
+
+/// Si la salida la pidió macOS (Dock, cerrar sesión), está esperando respuesta
+/// y hay que dársela; si no, basta con cerrar el bucle de eventos.
+fn terminar(app: &tauri::AppHandle) {
+    #[cfg(target_os = "macos")]
+    if salida_macos::responder(app) {
+        return;
+    }
     app.exit(0);
 }
 
@@ -50,6 +64,41 @@ fn mostrar_ventana(app: &tauri::AppHandle) {
         let _ = ventana.unminimize();
         let _ = ventana.set_focus();
     }
+}
+
+/// Pide el reporte al frontend y sale aunque no conteste. false si ya estaba saliendo.
+fn pedir_salida(app: &tauri::AppHandle) -> bool {
+    let prefs = app.state::<Preferencias>();
+    if prefs.saliendo.swap(true, Ordering::Relaxed) {
+        return false;
+    }
+    let _ = app.emit("orbtime://salir", ());
+
+    // Red de seguridad: si la interfaz no responde, salir igual.
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(ESPERA_SALIDA_SEGUNDOS));
+        terminar(&handle);
+    });
+    true
+}
+
+/// El "Quit" del menú se cambia por uno propio que pide el reporte directamente,
+/// sin pasar por terminate:. El Dock y cerrar sesión sí pasan: ver salida_macos.
+#[cfg(target_os = "macos")]
+fn menu_de_la_app(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    use tauri::menu::MenuItemKind;
+
+    let menu = Menu::default(app)?;
+    if let Some(MenuItemKind::Submenu(submenu)) = menu.items()?.into_iter().next() {
+        // En el menú por defecto, "Quit" es lo último del submenú de la app.
+        if let Some(MenuItemKind::Predefined(quit)) = submenu.items()?.pop() {
+            let texto = quit.text()?;
+            submenu.remove(&quit)?;
+            submenu.append(&MenuItem::with_id(app, "salir-app", texto, true, Some("CmdOrCtrl+Q"))?)?;
+        }
+    }
+    Ok(menu)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -64,6 +113,11 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![set_ocultar_al_cerrar, salir_app])
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                app.set_menu(menu_de_la_app(app.handle())?)?;
+                salida_macos::instalar(app.handle());
+            }
             construir_bandeja(app.handle())?;
 
             // Latido: no calcula nada, solo le da un empujón al frontend.
@@ -79,10 +133,14 @@ pub fn run() {
         })
         .on_window_event(|ventana, evento| {
             if let WindowEvent::CloseRequested { api, .. } = evento {
-                let prefs = ventana.app_handle().state::<Preferencias>();
-                if prefs.ocultar_al_cerrar.load(Ordering::Relaxed) {
-                    api.prevent_close();
+                // La ventana no se destruye nunca: sin ella no hay interfaz que
+                // guarde el reporte.
+                api.prevent_close();
+                let app = ventana.app_handle();
+                if app.state::<Preferencias>().ocultar_al_cerrar.load(Ordering::Relaxed) {
                     let _ = ventana.hide();
+                } else {
+                    pedir_salida(app);
                 }
             }
         })
@@ -93,23 +151,13 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             tauri::RunEvent::Reopen { .. } => mostrar_ventana(app),
 
-            // Salida pedida por el sistema: Cmd+Q, "Salir" del Dock, apagar la
-            // Mac. `code` viene vacío justo en esos casos; cuando el frontend
-            // llama a salir_app trae Some(0) y entonces sí se deja salir.
+            // No quedan ventanas (no debería pasar: cerrar solo oculta o pide la
+            // salida). `code` viene vacío solo en ese caso; el de salir_app trae
+            // Some(0) y ese sí se deja pasar.
             tauri::RunEvent::ExitRequested { api, code, .. } if code.is_none() => {
-                let prefs = app.state::<Preferencias>();
-                if prefs.saliendo.swap(true, Ordering::Relaxed) {
-                    return; // ya se pidió; no aplazar de nuevo
+                if pedir_salida(app) {
+                    api.prevent_exit();
                 }
-                api.prevent_exit();
-                let _ = app.emit("orbtime://salir", ());
-
-                // Red de seguridad: si la interfaz no responde, salir igual.
-                let handle = app.clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(Duration::from_secs(ESPERA_SALIDA_SEGUNDOS));
-                    handle.exit(0);
-                });
             }
 
             _ => {}
@@ -123,7 +171,12 @@ fn construir_bandeja(app: &tauri::AppHandle) -> tauri::Result<()> {
     let salir = MenuItem::with_id(app, "salir", "Cerrar día y salir", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&abrir, &exportar, &separador, &salir])?;
 
-    let mut bandeja = TrayIconBuilder::with_id("orbtime-tray")
+    // Solo la silueta de la ō (Logo/OrbitaBlack.svg en negro sobre transparente,
+    // 26×36 px = 18 pt a 2x). Como plantilla, macOS la pinta blanca o negra según
+    // la barra de menús, igual que los íconos del sistema.
+    TrayIconBuilder::with_id("orbtime-tray")
+        .icon(tauri::include_image!("icons/bandeja.png"))
+        .icon_as_template(true)
         .menu(&menu)
         .tooltip("ORBTIME")
         .on_menu_event(|app, evento| match evento.id.as_ref() {
@@ -132,16 +185,12 @@ fn construir_bandeja(app: &tauri::AppHandle) -> tauri::Result<()> {
             "exportar" => {
                 let _ = app.emit("orbtime://exportar", ());
             }
-            "salir" => {
-                let _ = app.emit("orbtime://salir", ());
+            // Este manejador recibe cualquier evento de menú, también el ⌘Q de la app.
+            "salir" | "salir-app" => {
+                pedir_salida(app);
             }
             _ => {}
-        });
-
-    if let Some(icono) = app.default_window_icon() {
-        bandeja = bandeja.icon(icono.clone());
-    }
-
-    bandeja.build(app)?;
+        })
+        .build(app)?;
     Ok(())
 }

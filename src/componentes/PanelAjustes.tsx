@@ -1,6 +1,9 @@
-import { useState, type CSSProperties } from "react";
-import type { Ajustes, EstadoDia, Paquete, VentanaHappyHour } from "../tipos";
-import { DIAS_CORTOS } from "../lib/horario";
+import { useRef, useState, type CSSProperties } from "react";
+import type { Ajustes, EstadoDia, Horario, Paquete, VentanaHappyHour } from "../tipos";
+import { DIAS, DIAS_CORTOS } from "../lib/horario";
+import { mayuscula } from "../lib/texto";
+import { Modal } from "./Modal";
+import { Segmentado } from "./Segmentado";
 
 interface Props {
   estado: EstadoDia;
@@ -8,7 +11,13 @@ interface Props {
   onCerrar: () => void;
 }
 
+type Seccion = "precios" | "horario" | "avisos";
+
+/** La semana empieza en lunes, como se lee en la puerta. */
+const SEMANA = [1, 2, 3, 4, 5, 6, 0];
+
 export function PanelAjustes({ estado, onGuardar, onCerrar }: Props) {
+  const [seccion, setSeccion] = useState<Seccion>("precios");
   const [paquetes, setPaquetes] = useState<Paquete[]>(() =>
     estado.paquetes.map((p) => ({ ...p })),
   );
@@ -17,9 +26,16 @@ export function PanelAjustes({ estado, onGuardar, onCerrar }: Props) {
     horarios: estado.ajustes.horarios.map((h) => ({ ...h })),
     happyHour: estado.ajustes.happyHour.map((v) => ({ ...v, dias: [...v.dias] })),
   }));
+  const original = useRef(JSON.stringify({ paquetes, ajustes }));
 
   const editarPaquete = (id: string, cambios: Partial<Paquete>) =>
     setPaquetes((prev) => prev.map((p) => (p.id === id ? { ...p, ...cambios } : p)));
+
+  const editarHorario = (dia: number, cambios: Partial<Horario>) =>
+    setAjustes((a) => ({
+      ...a,
+      horarios: a.horarios.map((h) => (h.dia === dia ? { ...h, ...cambios } : h)),
+    }));
 
   const editarVentana = (i: number, cambios: Partial<VentanaHappyHour>) =>
     setAjustes((a) => ({
@@ -39,193 +55,206 @@ export function PanelAjustes({ estado, onGuardar, onCerrar }: Props) {
     return Number.isFinite(n) && n >= 0 ? n : 0;
   };
 
-  return (
-    <div className="velo" onClick={onCerrar}>
-      <div
-        className="modal ancho"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="modal-cabeza">
-          <h2>Ajustes</h2>
-          <button className="btn fantasma chico" onClick={onCerrar} aria-label="Cerrar">
-            ✕
-          </button>
-        </div>
+  /** Si hay cambios sin guardar, se pregunta antes de tirarlos. */
+  function cerrar() {
+    const sinCambios = JSON.stringify({ paquetes, ajustes }) === original.current;
+    if (sinCambios || confirm("¿Salir sin guardar los cambios?")) onCerrar();
+  }
 
-        <div className="modal-cuerpo">
-          <div className="ajustes-grupo">
-            <h3>Paquetes y precios</h3>
-            <div className="precios-cabecera">
-              <span />
+  return (
+    <Modal
+      titulo="Ajustes"
+      ancho
+      onCerrar={cerrar}
+      pie={
+        <>
+          <button type="button" className="btn fantasma" onClick={cerrar}>
+            Cancelar
+          </button>
+          <button type="button" className="btn primario" onClick={() => onGuardar(paquetes, ajustes)}>
+            Guardar
+          </button>
+        </>
+      }
+    >
+      <div className="ajustes-secciones">
+        <Segmentado
+          etiqueta="Sección"
+          opciones={[
+            { valor: "precios", etiqueta: "Precios" },
+            { valor: "horario", etiqueta: "Horario" },
+            { valor: "avisos", etiqueta: "Avisos" },
+          ]}
+          valor={seccion}
+          onCambio={setSeccion}
+        />
+      </div>
+
+      {seccion === "precios" && (
+        <>
+          <section className="ajustes-grupo">
+            <h3>Paquetes</h3>
+            <div className="precios-fila cabecera" aria-hidden="true">
+              <span>Nombre</span>
               <span>Por hora</span>
               <span>Día</span>
               <span>All access</span>
-              <span>All access en happy hour</span>
+              <span>Happy hour</span>
             </div>
             {paquetes.map((p) => (
-              <div
-                key={p.id}
-                className="paquete-editor"
-                style={{ "--tono": p.color } as CSSProperties}
-              >
-                <div className="paquete-fila">
-                  <div className="paquete-identidad">
-                    <input
-                      type="color"
-                      value={p.color}
-                      onChange={(e) => editarPaquete(p.id, { color: e.target.value })}
-                      aria-label={`Color de ${p.nombre}`}
-                    />
-                    <input
-                      className="campo"
-                      value={p.nombre}
-                      onChange={(e) => editarPaquete(p.id, { nombre: e.target.value })}
-                      aria-label="Nombre del paquete"
-                    />
-                  </div>
+              <div key={p.id} className="precios-fila" style={{ "--tono": p.color } as CSSProperties}>
+                <div className="paquete-identidad">
                   <input
-                    className="campo"
-                    type="number"
-                    min={0}
-                    value={p.precioHora}
-                    onChange={(e) => editarPaquete(p.id, { precioHora: num(e.target.value) })}
-                    aria-label={`Precio por hora de ${p.nombre}`}
+                    type="color"
+                    className="muestra-color"
+                    value={p.color}
+                    onChange={(e) => editarPaquete(p.id, { color: e.target.value })}
+                    aria-label={`Color de ${p.nombre}`}
                   />
                   <input
                     className="campo"
-                    type="number"
-                    min={0}
-                    value={p.precioDia}
-                    onChange={(e) => editarPaquete(p.id, { precioDia: num(e.target.value) })}
-                    aria-label={`Precio de día de ${p.nombre}`}
-                  />
-                  <input
-                    className="campo"
-                    type="number"
-                    min={0}
-                    value={p.precioAllAccess}
-                    onChange={(e) => editarPaquete(p.id, { precioAllAccess: num(e.target.value) })}
-                    aria-label={`Precio all access de ${p.nombre}`}
-                  />
-                  <input
-                    className="campo"
-                    type="number"
-                    min={0}
-                    placeholder="—"
-                    value={p.precioHappyHour ?? ""}
-                    onChange={(e) =>
-                      editarPaquete(p.id, {
-                        precioHappyHour: e.target.value === "" ? null : num(e.target.value),
-                      })
-                    }
-                    aria-label={`Precio de happy hour de ${p.nombre}`}
+                    value={p.nombre}
+                    onChange={(e) => editarPaquete(p.id, { nombre: e.target.value })}
+                    aria-label="Nombre del paquete"
                   />
                 </div>
+                <CampoPrecio
+                  valor={p.precioHora}
+                  onCambio={(v) => editarPaquete(p.id, { precioHora: num(v) })}
+                  etiqueta={`Precio por hora de ${p.nombre}`}
+                />
+                <CampoPrecio
+                  valor={p.precioDia}
+                  onCambio={(v) => editarPaquete(p.id, { precioDia: num(v) })}
+                  etiqueta={`Precio de día de ${p.nombre}`}
+                />
+                <CampoPrecio
+                  valor={p.precioAllAccess}
+                  onCambio={(v) => editarPaquete(p.id, { precioAllAccess: num(v) })}
+                  etiqueta={`Precio all access de ${p.nombre}`}
+                />
+                <CampoPrecio
+                  valor={p.precioHappyHour ?? ""}
+                  onCambio={(v) =>
+                    editarPaquete(p.id, { precioHappyHour: v === "" ? null : num(v) })
+                  }
+                  etiqueta={`Precio all access en happy hour de ${p.nombre}`}
+                  placeholder="—"
+                />
               </div>
             ))}
-            <p className="pista">
-              Deja vacía la última columna en los paquetes que no tengan happy hour.
-            </p>
-          </div>
+            <p className="pista">Deja vacío “Happy hour” en los paquetes que no la tienen.</p>
+          </section>
 
-          <div className="ajustes-grupo">
-            <h3>Descuentos</h3>
+          <section className="ajustes-grupo">
+            <h3>Descuento de estudiante</h3>
             <div className="linea-ajuste">
-              <label htmlFor="aj-est">Estudiante</label>
-              <input
-                id="aj-est"
-                className="campo corto"
-                type="number"
-                min={0}
-                max={100}
-                value={ajustes.descuentoEstudiante}
-                onChange={(e) =>
-                  setAjustes({ ...ajustes, descuentoEstudiante: Math.min(100, num(e.target.value)) })
-                }
-              />
-              <span className="pista">% sobre el precio de lista. Nunca se acumula con la happy hour.</span>
+              <div className="campo-sufijo">
+                <input
+                  id="aj-estudiante"
+                  className="campo corto"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={ajustes.descuentoEstudiante}
+                  onChange={(e) =>
+                    setAjustes({
+                      ...ajustes,
+                      descuentoEstudiante: Math.min(100, num(e.target.value)),
+                    })
+                  }
+                  aria-label="Descuento de estudiante en porcentaje"
+                />
+                <span aria-hidden="true">%</span>
+              </div>
+              <span className="pista">No se suma a la happy hour.</span>
             </div>
+          </section>
+        </>
+      )}
 
-            <h4 className="sub">Ventanas de happy hour</h4>
+      {seccion === "horario" && (
+        <>
+          <section className="ajustes-grupo">
+            <h3>Horario del negocio</h3>
+            {SEMANA.map((dia) => {
+              const h = ajustes.horarios.find((x) => x.dia === dia);
+              if (!h) return null;
+              return (
+                <div key={dia} className="linea-horario">
+                  <span className="linea-horario-dia">{mayuscula(DIAS[dia])}</span>
+                  <input
+                    className="campo hora"
+                    type="time"
+                    value={h.abre}
+                    onChange={(e) => editarHorario(dia, { abre: e.target.value })}
+                    aria-label={`Abre el ${DIAS[dia]}`}
+                  />
+                  <span className="pista">a</span>
+                  <input
+                    className="campo hora"
+                    type="time"
+                    value={h.cierra}
+                    onChange={(e) => editarHorario(dia, { cierra: e.target.value })}
+                    aria-label={`Cierra el ${DIAS[dia]}`}
+                  />
+                </div>
+              );
+            })}
+          </section>
+
+          <section className="ajustes-grupo">
+            <h3>Happy hour</h3>
             {ajustes.happyHour.map((v, i) => (
               <div key={i} className="ventana-hh">
-                <div className="dias-elegir">
-                  {DIAS_CORTOS.map((nombre, dia) => (
+                <div className="dias-elegir" role="group" aria-label={`Días de la ventana ${i + 1}`}>
+                  {SEMANA.map((dia) => (
                     <button
                       key={dia}
-                      className="mini"
+                      type="button"
+                      className="dia-boton"
                       aria-pressed={v.dias.includes(dia)}
                       onClick={() => alternarDia(i, dia)}
+                      title={mayuscula(DIAS[dia])}
                     >
-                      {nombre}
+                      {DIAS_CORTOS[dia]}
                     </button>
                   ))}
                 </div>
-                <input
-                  className="campo corto"
-                  type="time"
-                  value={v.desde}
-                  onChange={(e) => editarVentana(i, { desde: e.target.value })}
-                  aria-label="Inicio de la happy hour"
-                />
-                <span className="pista">a</span>
-                <input
-                  className="campo corto"
-                  type="time"
-                  value={v.hasta}
-                  onChange={(e) => editarVentana(i, { hasta: e.target.value })}
-                  aria-label="Fin de la happy hour"
-                />
+                <div className="ventana-horas">
+                  <input
+                    className="campo hora"
+                    type="time"
+                    value={v.desde}
+                    onChange={(e) => editarVentana(i, { desde: e.target.value })}
+                    aria-label="Empieza"
+                  />
+                  <span className="pista">a</span>
+                  <input
+                    className="campo hora"
+                    type="time"
+                    value={v.hasta}
+                    onChange={(e) => editarVentana(i, { hasta: e.target.value })}
+                    aria-label="Termina"
+                  />
+                </div>
               </div>
             ))}
-          </div>
+          </section>
+        </>
+      )}
 
-          <div className="ajustes-grupo">
-            <h3>Horario del negocio</h3>
-            {ajustes.horarios.map((h, i) => (
-              <div key={h.dia} className="linea-horario">
-                <span>{DIAS_CORTOS[h.dia]}</span>
-                <input
-                  className="campo corto"
-                  type="time"
-                  value={h.abre}
-                  onChange={(e) =>
-                    setAjustes({
-                      ...ajustes,
-                      horarios: ajustes.horarios.map((x, j) =>
-                        j === i ? { ...x, abre: e.target.value } : x,
-                      ),
-                    })
-                  }
-                  aria-label={`Hora de apertura del ${DIAS_CORTOS[h.dia]}`}
-                />
-                <span className="pista">a</span>
-                <input
-                  className="campo corto"
-                  type="time"
-                  value={h.cierra}
-                  onChange={(e) =>
-                    setAjustes({
-                      ...ajustes,
-                      horarios: ajustes.horarios.map((x, j) =>
-                        j === i ? { ...x, cierra: e.target.value } : x,
-                      ),
-                    })
-                  }
-                  aria-label={`Hora de cierre del ${DIAS_CORTOS[h.dia]}`}
-                />
-              </div>
-            ))}
-          </div>
-
-          <div className="ajustes-grupo">
-            <h3>Recordatorios</h3>
-            <div className="linea-ajuste">
-              <label htmlFor="aj-int">Avisar cada</label>
+      {seccion === "avisos" && (
+        <div className="filas-ajuste">
+          <div className="fila-ajuste">
+            <label htmlFor="aj-intervalo">
+              <b>Recordar el tiempo</b>
+              <small>Un aviso por cada persona que paga por hora.</small>
+            </label>
+            <div className="campo-sufijo">
+              <span aria-hidden="true">cada</span>
               <input
-                id="aj-int"
+                id="aj-intervalo"
                 className="campo corto"
                 type="number"
                 min={1}
@@ -234,46 +263,60 @@ export function PanelAjustes({ estado, onGuardar, onCerrar }: Props) {
                   setAjustes({ ...ajustes, intervaloAlarmaMin: Math.max(1, num(e.target.value)) })
                 }
               />
-              <span className="pista">
-                minutos, por cada persona que paga por tiempo.
-              </span>
+              <span aria-hidden="true">min</span>
             </div>
-
-            <label className="interruptor">
-              <input
-                type="checkbox"
-                checked={ajustes.avisarCierre}
-                onChange={(e) => setAjustes({ ...ajustes, avisarCierre: e.target.checked })}
-              />
-              <span>
-                Avisar cuando falte poco para cerrar
-                <small>A 30 y a 15 minutos, solo si todavía queda gente adentro.</small>
-              </span>
-            </label>
-
-            <label className="interruptor">
-              <input
-                type="checkbox"
-                checked={ajustes.cerrarAMenuBar}
-                onChange={(e) => setAjustes({ ...ajustes, cerrarAMenuBar: e.target.checked })}
-              />
-              <span>
-                Al cerrar la ventana, seguir en la barra de menús
-                <small>Los relojes siguen corriendo y las alarmas siguen llegando.</small>
-              </span>
-            </label>
           </div>
-        </div>
 
-        <div className="modal-pie">
-          <button className="btn fantasma" onClick={onCerrar}>
-            Cancelar
-          </button>
-          <button className="btn primario" onClick={() => onGuardar(paquetes, ajustes)}>
-            Guardar
-          </button>
+          <label className="fila-ajuste">
+            <span>
+              <b>Avisar antes de cerrar</b>
+              <small>A 30 y a 15 minutos, si todavía queda gente.</small>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              className="interruptor"
+              checked={ajustes.avisarCierre}
+              onChange={(e) => setAjustes({ ...ajustes, avisarCierre: e.target.checked })}
+            />
+          </label>
+
+          <label className="fila-ajuste">
+            <span>
+              <b>Seguir en la barra de menús</b>
+              <small>Al cerrar la ventana, los relojes y avisos siguen corriendo.</small>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              className="interruptor"
+              checked={ajustes.cerrarAMenuBar}
+              onChange={(e) => setAjustes({ ...ajustes, cerrarAMenuBar: e.target.checked })}
+            />
+          </label>
         </div>
-      </div>
+      )}
+    </Modal>
+  );
+}
+
+function CampoPrecio(props: {
+  valor: number | "";
+  onCambio: (valor: string) => void;
+  etiqueta: string;
+  placeholder?: string;
+}) {
+  return (
+    <div className="campo-precio">
+      <input
+        className="campo"
+        type="number"
+        min={0}
+        value={props.valor}
+        placeholder={props.placeholder}
+        onChange={(e) => props.onCambio(e.target.value)}
+        aria-label={props.etiqueta}
+      />
     </div>
   );
 }

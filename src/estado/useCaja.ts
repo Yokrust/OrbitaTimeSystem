@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import type { EstadoDia } from "../tipos";
 import { estadoVacio } from "../lib/defaults";
 import { cargarEstado, guardarEstado } from "../lib/almacen";
-import { avisosPendientes, notificar, prepararNotificaciones } from "../lib/alarmas";
+import { avisosPendientes, notificar, prepararNotificaciones, type Aviso } from "../lib/alarmas";
 import { reducir, type Accion } from "./acciones";
+
+const clave = (a: Aviso) => `${a.personaId}:${a.codigo}`;
 
 /** Cada cuánto refrescamos los cronómetros en pantalla. */
 const TICK_UI_MS = 1000;
@@ -35,19 +37,25 @@ export function useAhora(intervalo = TICK_UI_MS): number {
 export function useCaja() {
   const [estado, despachar] = useReducer(reducir, undefined, () => estadoVacio());
   const [listo, setListo] = useState(false);
+  const [errorCarga, setErrorCarga] = useState(false);
   const estadoRef = useRef(estado);
   estadoRef.current = estado;
-  /** Avisos ya notificados en esta sesión: "personaId:codigo". */
+  /** Avisos notificados que el estado todavía no marca: "personaId:codigo". */
   const yaEmitidos = useRef<Set<string>>(new Set());
 
   // 1. Carga inicial desde disco.
   useEffect(() => {
     let vivo = true;
-    cargarEstado().then((guardado) => {
-      if (!vivo) return;
-      despachar({ tipo: "cargar", estado: guardado });
-      setListo(true);
-    });
+    cargarEstado()
+      .then((guardado) => {
+        if (!vivo) return;
+        despachar({ tipo: "cargar", estado: guardado });
+        setListo(true);
+      })
+      .catch((e) => {
+        console.error("[caja] no se pudo cargar el día:", e);
+        if (vivo) setErrorCarga(true);
+      });
     return () => {
       vivo = false;
     };
@@ -72,14 +80,23 @@ export function useCaja() {
   //    macOS congele los temporizadores del webview en segundo plano).
   const revisarAlarmas = useCallback(() => {
     const actual = estadoRef.current;
-    const pendientes = avisosPendientes(actual.cuentas, actual.paquetes, actual.ajustes);
+    const pendientes = avisosPendientes(
+      actual.cuentas,
+      actual.paquetes,
+      actual.ajustes,
+      Date.now(),
+      actual.avisosCierre,
+    );
     // El despacho de React no es inmediato: si la revisión corre dos veces
     // seguidas, el estado todavía no trae los avisos marcados. Este candado
-    // en memoria evita la notificación repetida.
-    const avisos = pendientes.filter((a) => !yaEmitidos.current.has(`${a.personaId}:${a.codigo}`));
+    // en memoria evita la notificación repetida. Lo que ya no sale pendiente
+    // quedó marcado (o dejó de aplicar) y se suelta, por si algo lo reinicia.
+    const siguen = new Set(pendientes.map(clave));
+    for (const k of yaEmitidos.current) if (!siguen.has(k)) yaEmitidos.current.delete(k);
+    const avisos = pendientes.filter((a) => !yaEmitidos.current.has(clave(a)));
     if (avisos.length === 0) return;
     for (const aviso of avisos) {
-      yaEmitidos.current.add(`${aviso.personaId}:${aviso.codigo}`);
+      yaEmitidos.current.add(clave(aviso));
       void notificar(aviso.titulo, aviso.cuerpo);
     }
     despachar({ tipo: "marcarAvisos", avisos });
@@ -94,16 +111,21 @@ export function useCaja() {
 
   useEffect(() => {
     if (!listo) return;
+    let vivo = true;
     let quitar: (() => void) | undefined;
     import("@tauri-apps/api/event")
       .then(({ listen }) => listen("orbtime://latido", () => revisarAlarmas()))
       .then((fn) => {
-        quitar = fn;
+        if (vivo) quitar = fn;
+        else fn();
       })
       .catch(() => {
         // Fuera de Tauri no hay latido; basta con el intervalo propio.
       });
-    return () => quitar?.();
+    return () => {
+      vivo = false;
+      quitar?.();
+    };
   }, [listo, revisarAlarmas]);
 
   const acciones = useMemo(
@@ -116,9 +138,10 @@ export function useCaja() {
     [],
   );
 
-  return { estado, listo, ...acciones } as {
+  return { estado, listo, errorCarga, ...acciones } as {
     estado: EstadoDia;
     listo: boolean;
+    errorCarga: boolean;
     despachar: (a: Accion) => void;
     guardarAhora: () => Promise<void>;
     leerEstado: () => EstadoDia;

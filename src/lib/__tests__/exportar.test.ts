@@ -114,7 +114,7 @@ describe("los totales del reporte concuerdan entre sí", () => {
     const csv = generarCSV(estadoDePrueba(), BASE + 120 * 60_000);
     const total = Number(csv.match(/Total del día,([\d.]+)/)![1]);
     const porPaquete = [...csv.matchAll(/^(Black|Blue|Gold),\d+,\d+,[\d.]+,([\d.]+)$/gm)];
-    const porMetodo = [...csv.matchAll(/^(efectivo|tarjeta|transferencia|sin cobrar),\d+,([\d.]+)$/gm)];
+    const porMetodo = [...csv.matchAll(/^(efectivo|tarjeta|sin cobrar),\d+,([\d.]+)$/gm)];
 
     expect(porPaquete.length).toBe(2);
     expect(porMetodo.length).toBe(2);
