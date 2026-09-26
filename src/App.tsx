@@ -75,23 +75,30 @@ export default function App() {
       else fn();
     };
 
-    import("@tauri-apps/api/event")
-      .then(async ({ listen }) => {
+    // Rust aplaza el cierre hasta que el reporte esté en disco. Pase lo que
+    // pase hay que llamar a salir_app, o la app se queda colgada. Una sola vez.
+    let saliendo = false;
+    const salir = async () => {
+      if (saliendo) return;
+      saliendo = true;
+      try {
+        await exportar(false);
+        await guardarAhora();
+      } catch (e) {
+        console.error("[app] no se pudo cerrar limpio:", e);
+      }
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("salir_app");
+    };
+
+    Promise.all([import("@tauri-apps/api/event"), import("@tauri-apps/api/core")])
+      .then(async ([{ listen }, { invoke }]) => {
         registrar(await listen("orbtime://exportar", () => void exportar(false)));
-        // Rust aplaza el cierre hasta que el reporte esté en disco. Pase lo
-        // que pase hay que llamar a salir_app, o la app se queda colgada.
-        registrar(
-          await listen("orbtime://salir", async () => {
-            try {
-              await exportar(false);
-              await guardarAhora();
-            } catch (e) {
-              console.error("[app] no se pudo cerrar limpio:", e);
-            }
-            const { invoke } = await import("@tauri-apps/api/core");
-            await invoke("salir_app");
-          }),
-        );
+        registrar(await listen("orbtime://salir", () => void salir()));
+        // Si pidieron salir mientras la caja cargaba (Dock o ⌘Q recién
+        // abierta), el aviso se perdió. Hasta aquí no se podía atender: sin el
+        // día cargado se habría exportado y guardado un día vacío.
+        if (vivo && (await invoke<boolean>("salida_pedida"))) void salir();
       })
       .catch(() => {
         // Fuera de Tauri no hay barra de menús.
