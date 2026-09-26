@@ -12,7 +12,7 @@
  *   3. resuelve el conflicto de escrituras (ver nota al final)
  */
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
-import type { Cuenta, MetodoPago, Modalidad, Paquete, Persona } from "../tipos";
+import type { Cuenta, MetodoGuardado, Modalidad, Paquete, Persona } from "../tipos";
 
 const URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const LLAVE = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -44,7 +44,7 @@ interface FilaCuenta {
   abierta_en: string;
   cerrada_en: string | null;
   total_cobrado: number | null;
-  metodo_pago: MetodoPago | null;
+  metodo_pago: MetodoGuardado | null;
 }
 
 interface FilaPersona {

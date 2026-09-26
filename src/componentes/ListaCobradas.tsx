@@ -1,15 +1,16 @@
 import type { CSSProperties } from "react";
-import { Banknote, CreditCard, Receipt, RotateCcw, Trash2 } from "lucide-react";
-import type { EstadoDia, MetodoPago } from "../tipos";
+import { ArrowLeftRight, Banknote, CreditCard, Receipt, RotateCcw, Trash2 } from "lucide-react";
+import type { EstadoDia, MetodoGuardado } from "../tipos";
 import type { Accion } from "../estado/acciones";
 import { buscarPaquete, redondearPeso } from "../lib/cobro";
 import { formatoHora } from "../lib/tiempo";
 import { Dinero } from "./Dinero";
 import { Menu } from "./Menu";
 
-const ICONO_METODO: Record<MetodoPago, typeof Banknote> = {
+const ICONO_METODO: Record<MetodoGuardado, typeof Banknote> = {
   efectivo: Banknote,
   tarjeta: CreditCard,
+  transferencia: ArrowLeftRight,
 };
 
 interface Props {

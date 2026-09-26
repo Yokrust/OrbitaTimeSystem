@@ -6,7 +6,7 @@ vez macOS pide un permiso extra.
 
 ## 1. Instalar
 
-1. Abre `ORBTIME_0.2.0_universal.dmg`.
+1. Abre el `.dmg` de ORBTIME (`ORBTIME_…_universal.dmg`).
 2. Arrastra **ORBTIME** a **Aplicaciones**.
 3. Expulsa el disco.
 

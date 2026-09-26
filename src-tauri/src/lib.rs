@@ -42,6 +42,13 @@ fn set_ocultar_al_cerrar(prefs: tauri::State<'_, Preferencias>, valor: bool) {
     prefs.ocultar_al_cerrar.store(valor, Ordering::Relaxed);
 }
 
+/// ¿Ya se pidió salir? El aviso orbtime://salir no espera a nadie: si llegó
+/// mientras la interfaz cargaba el día, se perdió. Ella lo pregunta al escuchar.
+#[tauri::command]
+fn salida_pedida(prefs: tauri::State<'_, Preferencias>) -> bool {
+    prefs.saliendo.load(Ordering::Relaxed)
+}
+
 /// Salida de verdad. El frontend la llama después de exportar el reporte.
 #[tauri::command]
 fn salir_app(app: tauri::AppHandle) {
@@ -111,7 +118,7 @@ pub fn run() {
             ocultar_al_cerrar: AtomicBool::new(true),
             saliendo: AtomicBool::new(false),
         })
-        .invoke_handler(tauri::generate_handler![set_ocultar_al_cerrar, salir_app])
+        .invoke_handler(tauri::generate_handler![set_ocultar_al_cerrar, salida_pedida, salir_app])
         .setup(|app| {
             #[cfg(target_os = "macos")]
             {
