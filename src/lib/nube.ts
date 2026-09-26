@@ -11,6 +11,8 @@
  *   2. copia .env.example a .env con tu URL y anon key, y pon esa URL
  *      (https:// y wss://) en el connect-src de la CSP (tauri.conf.json)
  *   3. resuelve el conflicto de escrituras (ver nota al final)
+ *   4. falta el inicio de sesión: sin una cuenta de public.equipo, las
+ *      políticas no dejan leer ni escribir nada
  */
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import type { Cuenta, MetodoGuardado, Modalidad, Paquete, Persona } from "../tipos";
@@ -177,7 +179,8 @@ export async function suscribirse(alCambiar: () => void): Promise<() => void> {
  * final y el otro pierde su cambio. Las opciones, de menos a más trabajo:
  *
  *   a) Un solo dispositivo escribe (la Mac) y el iPhone es de solo lectura.
- *      Cubre el caso real —consultar desde el piso— con cero riesgo.
+ *      Cubre el caso real —consultar desde el piso— con cero riesgo. La base
+ *      ya lo impone si quien usa el iPhone tiene rol 'consulta'.
  *   b) Comparar `actualizado_en` antes de escribir y descartar lo viejo.
  *   c) Mover el cierre de cuenta a una función de Postgres, para que el cobro
  *      sea atómico aunque dos cajeros lo intenten al mismo tiempo.

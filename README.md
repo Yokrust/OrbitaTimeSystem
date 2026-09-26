@@ -187,8 +187,10 @@ forma.
 El plan que ya está preparado:
 
 1. `supabase/schema.sql` crea las tablas (espejo del modelo local), las
-   políticas de RLS y las suscripciones de realtime. Se pega en el SQL Editor
-   de Supabase y listo.
+   políticas de RLS y las suscripciones de realtime. Solo entra quien está en
+   la tabla `equipo`: con rol `caja` escribe, con `consulta` solo mira. Antes
+   de pegarlo en el SQL Editor hay que apagar en Supabase el registro público
+   y el inicio de sesión anónimo; los pasos están al inicio del archivo.
 2. `.env.example` → `.env` con la URL y la anon key del proyecto. La misma URL
    (con `https://` y `wss://`) va en el `connect-src` de la CSP, en
    `src-tauri/tauri.conf.json`: hoy la app no puede conectarse a nada.

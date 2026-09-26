@@ -2,8 +2,16 @@
 --
 -- Cómo aplicarlo:
 --   1. Crea un proyecto en supabase.com
---   2. SQL Editor -> pega este archivo -> Run
---   3. Copia URL y anon key a un archivo .env (mira .env.example)
+--   2. Authentication -> Sign In / Providers: apaga "Allow new users to sign
+--      up" y "Allow anonymous sign-ins". Las cuentas del equipo se crean por
+--      invitación.
+--   3. SQL Editor -> pega este archivo -> Run
+--   4. Da de alta al equipo (al final de este archivo)
+--   5. Copia URL y anon key a un archivo .env (mira .env.example)
+--
+-- Quién ve qué: solo quien está en public.equipo. Tener sesión no basta. Con
+-- rol 'caja' abre cuentas, cobra y marca salidas; con 'consulta' solo mira.
+-- Nadie borra desde la app. Sin sesión (la anon key sola) no se ve nada.
 --
 -- El prototipo de macOS funciona sin esto: guarda todo en disco. Estas tablas
 -- son el espejo del modelo local (src/tipos.ts), listo para cuando haya un
@@ -80,11 +88,53 @@ create table if not exists public.personas (
 create index if not exists personas_cuenta_idx on public.personas (cuenta_id);
 create index if not exists personas_dentro_idx on public.personas (salida) where salida is null;
 
+-- ----------------------------------------------------------------- equipo ---
+-- Quién opera la caja. Se llena a mano desde el SQL Editor (ver el final);
+-- desde la app solo se lee la fila propia, para saber el rol.
+
+create table if not exists public.equipo (
+  user_id  uuid primary key references auth.users(id) on delete cascade,
+  rol      text not null check (rol in ('caja','consulta'))
+);
+
+-- Las políticas preguntan por el equipo con estas dos funciones. Viven en un
+-- esquema que la API no expone y corren como su dueño, así que no dependen
+-- de las políticas de equipo.
+create schema if not exists privado;
+revoke all on schema privado from public, anon;
+grant usage on schema privado to authenticated;
+
+create or replace function privado.es_del_equipo()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (select 1 from public.equipo where user_id = (select auth.uid()));
+$$;
+
+create or replace function privado.es_caja()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.equipo where user_id = (select auth.uid()) and rol = 'caja'
+  );
+$$;
+
+revoke all on function privado.es_del_equipo(), privado.es_caja() from public, anon;
+grant execute on function privado.es_del_equipo(), privado.es_caja() to authenticated;
+
 -- --------------------------------------------- marca de última escritura ----
 
 create or replace function public.tocar_actualizado_en()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
   new.actualizado_en = now();
@@ -105,29 +155,57 @@ end;
 $$;
 
 -- ------------------------------------------------------------------- RLS ----
--- Un solo local: cualquier miembro del equipo que inicie sesión opera la caja.
--- Para varias sucursales habría que agregar local_id y filtrar por él aquí.
+-- Un solo local. Para varias sucursales habría que agregar local_id y
+-- filtrar por él aquí.
 
 alter table public.paquetes enable row level security;
 alter table public.cuentas  enable row level security;
 alter table public.personas enable row level security;
+alter table public.equipo   enable row level security;
 
+drop policy if exists "equipo_ve_su_fila" on public.equipo;
+create policy "equipo_ve_su_fila" on public.equipo
+  for select to authenticated using (user_id = (select auth.uid()));
+
+-- El equipo lee; solo caja escribe. Nadie borra desde la app: no hay grant
+-- ni política de DELETE. Si la sincronización llega a necesitarlo, se agregan
+-- los dos, la política con privado.es_caja().
 do $$
 declare t text;
 begin
   foreach t in array array['paquetes','cuentas','personas'] loop
+    -- Las de la primera versión dejaban entrar a cualquiera con sesión.
     execute format('drop policy if exists "equipo_lee_%1$s" on public.%1$s;', t);
-    execute format(
-      'create policy "equipo_lee_%1$s" on public.%1$s
-       for select to authenticated using (true);', t);
-
     execute format('drop policy if exists "equipo_escribe_%1$s" on public.%1$s;', t);
+
+    execute format('drop policy if exists "equipo_ve_%1$s" on public.%1$s;', t);
     execute format(
-      'create policy "equipo_escribe_%1$s" on public.%1$s
-       for all to authenticated using (true) with check (true);', t);
+      'create policy "equipo_ve_%1$s" on public.%1$s
+       for select to authenticated using ((select privado.es_del_equipo()));', t);
+
+    execute format('drop policy if exists "caja_agrega_%1$s" on public.%1$s;', t);
+    execute format(
+      'create policy "caja_agrega_%1$s" on public.%1$s
+       for insert to authenticated with check ((select privado.es_caja()));', t);
+
+    execute format('drop policy if exists "caja_edita_%1$s" on public.%1$s;', t);
+    execute format(
+      'create policy "caja_edita_%1$s" on public.%1$s
+       for update to authenticated
+       using ((select privado.es_caja())) with check ((select privado.es_caja()));', t);
   end loop;
 end;
 $$;
+
+-- -------------------------------------------------------------- permisos ----
+-- Explícitos: los proyectos nuevos de Supabase ya no los dan solos, y los
+-- viejos le daban todo también a anon. Sin sesión no se toca nada.
+
+revoke all on public.paquetes, public.cuentas, public.personas, public.equipo
+  from anon, authenticated;
+grant select, insert, update on public.paquetes, public.cuentas, public.personas
+  to authenticated;
+grant select on public.equipo to authenticated;
 
 -- -------------------------------------------------------------- realtime ----
 -- Con esto, marcar una salida en el iPhone se ve en la Mac al instante.
@@ -151,8 +229,11 @@ alter table public.paquetes replica identity full;
 
 -- --------------------------------------------------------------- reporte ----
 -- El mismo corte del día que exporta la app, pero calculado en Postgres.
+-- security_invoker: la vista respeta las políticas de arriba. Sin esto
+-- correría como su dueño (postgres) y se saltaría RLS.
 
-create or replace view public.reporte_dia as
+create or replace view public.reporte_dia
+with (security_invoker = true) as
 select
   c.fecha,
   c.id                                                as cuenta_id,
@@ -175,6 +256,9 @@ join public.personas p on p.cuenta_id = c.id
 join public.paquetes pq on pq.id = c.paquete_id
 order by c.fecha desc, c.abierta_en desc, p.entrada;
 
+revoke all on public.reporte_dia from anon, authenticated;
+grant select on public.reporte_dia to authenticated;
+
 -- ------------------------------------------------------- datos del negocio --
 -- Los tres paquetes tal como están en la caja. Si los cambias en Ajustes,
 -- vuelve a correr esta parte o deja que la app los suba.
@@ -193,3 +277,15 @@ on conflict (id) do update set
   precio_all_access = excluded.precio_all_access,
   precio_happy_hour = excluded.precio_happy_hour,
   orden             = excluded.orden;
+
+-- ---------------------------------------------------------- dar de alta ----
+-- Primero invita a la persona (Authentication -> Users -> Invite user) y
+-- luego, aquí mismo, dale su rol:
+--
+--   insert into public.equipo (user_id, rol)
+--   select id, 'caja' from auth.users where email = 'caja@ejemplo.mx';
+--
+-- Quitarle el acceso:
+--
+--   delete from public.equipo
+--   where user_id = (select id from auth.users where email = 'caja@ejemplo.mx');
