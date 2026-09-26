@@ -109,6 +109,30 @@ describe("reporte del día en CSV", () => {
   });
 });
 
+describe("el CSV no deja pasar fórmulas", () => {
+  // Excel ejecuta al abrir el archivo lo que empieza con = + - @.
+  const estado = estadoDePrueba();
+  estado.cuentas[0].personas[0].nombre = '=HYPERLINK("http://x.test","clic")';
+  estado.cuentas[0].nombre = "+Cuenta";
+  estado.cuentas[1].personas[0].nombre = "-Sofi";
+  estado.cuentas[1].notas = "@SUMA(A1)";
+  const csv = generarCSV(estado, BASE + 120 * 60_000);
+
+  it("antepone un apóstrofo a los textos que empiezan como fórmula", () => {
+    expect(csv).toContain(`"'=HYPERLINK(""http://x.test"",""clic"")"`);
+    expect(csv).toContain("'+Cuenta,");
+    expect(csv).toContain(",'-Sofi,");
+    expect(csv).toContain(",'@SUMA(A1)");
+    expect(csv).not.toMatch(/(^|,)[=+\-@]/m);
+  });
+
+  it("un número negativo se queda como número", () => {
+    const conNumero = estadoDePrueba();
+    conNumero.cuentas[1].notas = "-5";
+    expect(generarCSV(conNumero, BASE + 120 * 60_000)).toMatch(/,-5$/m);
+  });
+});
+
 describe("los totales del reporte concuerdan entre sí", () => {
   it("el total del día es el mismo por paquete y por método de pago", () => {
     const csv = generarCSV(estadoDePrueba(), BASE + 120 * 60_000);

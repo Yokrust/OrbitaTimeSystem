@@ -8,7 +8,8 @@
  *
  * Antes de usarlo:
  *   1. aplica supabase/schema.sql en tu proyecto
- *   2. copia .env.example a .env con tu URL y anon key
+ *   2. copia .env.example a .env con tu URL y anon key, y pon esa URL
+ *      (https:// y wss://) en el connect-src de la CSP (tauri.conf.json)
  *   3. resuelve el conflicto de escrituras (ver nota al final)
  */
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";

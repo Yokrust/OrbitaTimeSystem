@@ -208,8 +208,15 @@ export function generarCSV(estado: EstadoDia, ahora: number = Date.now()): strin
   return filas.map((f) => f.map(celda).join(",")).join("\r\n");
 }
 
+/** Lo que Excel toma como fórmula al abrir el archivo. */
+const INICIO_DE_FORMULA = /^[=+\-@\t\r]/;
+const NUMERO = /^-?\d+(\.\d+)?$/;
+
 function celda(valor: string): string {
   if (valor === "") return "";
+  // Un nombre como =HYPERLINK(...) se ejecutaría en Excel. Con el apóstrofo
+  // queda como texto; un número negativo no es fórmula y se deja igual.
+  if (INICIO_DE_FORMULA.test(valor) && !NUMERO.test(valor)) valor = `'${valor}`;
   if (/[",\r\n]/.test(valor)) return `"${valor.replace(/"/g, '""')}"`;
   return valor;
 }

@@ -189,7 +189,9 @@ El plan que ya está preparado:
 1. `supabase/schema.sql` crea las tablas (espejo del modelo local), las
    políticas de RLS y las suscripciones de realtime. Se pega en el SQL Editor
    de Supabase y listo.
-2. `.env.example` → `.env` con la URL y la anon key del proyecto.
+2. `.env.example` → `.env` con la URL y la anon key del proyecto. La misma URL
+   (con `https://` y `wss://`) va en el `connect-src` de la CSP, en
+   `src-tauri/tauri.conf.json`: hoy la app no puede conectarse a nada.
 3. `src/lib/nube.ts` ya trae el cliente y el mapeo entre las filas y el modelo.
    Falta conectarlo al reducer.
 4. `npm run tauri ios init` para la app de iPhone, con el mismo frontend.
